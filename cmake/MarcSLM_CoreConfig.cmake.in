@@ -1,0 +1,19 @@
+# ==============================================================================
+# MarcSLM_Core Package Configuration File
+# ==============================================================================
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Find required dependencies
+find_dependency(assimp CONFIG REQUIRED)
+find_dependency(manifold CONFIG REQUIRED)
+find_dependency(Clipper2 CONFIG REQUIRED)
+find_dependency(glm CONFIG REQUIRED)
+find_dependency(TBB CONFIG REQUIRED)
+
+# Include the exported targets
+include("${CMAKE_CURRENT_LIST_DIR}/MarcSLM_CoreTargets.cmake")
+
+check_required_components(MarcSLM_Core)

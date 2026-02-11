@@ -1,0 +1,35 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "marcslm",
+  "version": "0.1.0",
+  "description": "High-performance C++ core geometry engine for industrial DMLS/SLM slicing",
+  "homepage": "https://github.com/yourusername/MarcSLM",
+  "license": "Proprietary",
+  "dependencies": [
+    {
+      "name": "assimp",
+      "version>=": "5.3.1"
+    },
+    {
+      "name": "manifold",
+      "version>=": "2.4.5"
+    },
+    {
+      "name": "clipper2",
+      "version>=": "1.3.0"
+    },
+    {
+      "name": "glm",
+      "version>=": "0.9.9.8"
+    },
+    {
+      "name": "tbb",
+      "version>=": "2021.10.0"
+    },
+    {
+      "name": "gtest",
+      "version>=": "1.14.0"
+    }
+  ],
+  "builtin-baseline": "c8696863d371ab7f46545af322a3129c58c94f65"
+}
