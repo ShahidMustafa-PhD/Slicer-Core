@@ -78,11 +78,39 @@ endif()
 # ==============================================================================
 # Dependency Resolution (vcpkg integration)
 # ==============================================================================
-find_package(manifold CONFIG REQUIRED)
+
 find_package(assimp CONFIG REQUIRED)
 find_package(Clipper2 CONFIG REQUIRED)
 find_package(TBB CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
+find_package(manifold CONFIG REQUIRED)
+
+# Workaround for TBB debug library not found on Windows
+# Use release TBB library and import library for debug builds if debug variants are not available
+if(MSVC)
+    get_target_property(_tbb_lib_debug TBB::tbb IMPORTED_LOCATION_DEBUG)
+    if(NOT _tbb_lib_debug)
+        get_target_property(_tbb_lib_release TBB::tbb IMPORTED_LOCATION_RELEASE)
+        get_target_property(_tbb_implib_release TBB::tbb IMPORTED_IMPLIB_RELEASE)
+        get_target_property(_tbb_implib_debug TBB::tbb IMPORTED_IMPLIB_DEBUG)
+        
+        if(_tbb_lib_release)
+            # Set both LOCATION and IMPLIB for debug config
+            set_target_properties(TBB::tbb PROPERTIES 
+                IMPORTED_LOCATION_DEBUG "${_tbb_lib_release}"
+            )
+            
+            # Only set IMPLIB_DEBUG if IMPLIB_RELEASE exists and IMPLIB_DEBUG doesn't
+            if(_tbb_implib_release AND NOT _tbb_implib_debug)
+                set_target_properties(TBB::tbb PROPERTIES 
+                    IMPORTED_IMPLIB_DEBUG "${_tbb_implib_release}"
+                )
+            endif()
+            
+            message(STATUS "TBB: Using release library for debug builds (debug library not found)")
+        endif()
+    endif()
+endif()
 
 # Try to find Eigen3; if not found, attempt to locate it in vcpkg installed path
 find_package(Eigen3 CONFIG QUIET)
@@ -124,7 +152,6 @@ if(NOT TARGET Eigen3::Eigen)
 else()
     message(STATUS "Found Eigen3 (target Eigen3::Eigen)")
 endif()
-
 
 if(MARCSLM_BUILD_TESTS)
     find_package(GTest CONFIG REQUIRED)
@@ -257,6 +284,23 @@ target_link_libraries(io_example PRIVATE MarcSLM::Core)
 target_compile_features(io_example PRIVATE cxx_std_17)
 
 # ==============================================================================
+# Post-build step: Copy MarcSLM_CLI and dependencies to bin and install/bin after build
+# ==============================================================================
+if(MSVC)
+    set(POST_BUILD_INSTALL_DIR "${CMAKE_BINARY_DIR}/install/bin")
+    set(POST_BUILD_BIN_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+    add_custom_command(TARGET MarcSLM_CLI POST_BUILD
+        # Copy all DLLs to bin directory (runtime output dir)
+        COMMAND ${CMAKE_COMMAND} -Dsrc_dir="${CMAKE_RUNTIME_OUTPUT_DIRECTORY}" -Ddst_dir="${POST_BUILD_BIN_DIR}" -P "${CMAKE_SOURCE_DIR}/cmake/CopyDlls.cmake"
+        # Copy all DLLs to install/bin directory
+        COMMAND ${CMAKE_COMMAND} -Dsrc_dir="${CMAKE_RUNTIME_OUTPUT_DIRECTORY}" -Ddst_dir="${POST_BUILD_INSTALL_DIR}" -P "${CMAKE_SOURCE_DIR}/cmake/CopyDlls.cmake"
+        # Copy the main executable to install/bin
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:MarcSLM_CLI> "${POST_BUILD_INSTALL_DIR}"
+        COMMENT "Copying MarcSLM_CLI and all DLL dependencies to bin and install/bin after build"
+    )
+endif()
+
+# ==============================================================================
 # Include Directories
 # ==============================================================================
 target_include_directories(MarcSLM_Core
@@ -282,6 +326,8 @@ target_include_directories(io_example
 # ==============================================================================
 target_link_libraries(MarcSLM_Core
     PUBLIC
+         
+   
         # Math primitives
         glm::glm
         
@@ -370,7 +416,6 @@ install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/MarcSLM_CoreConfigVersion.cmake"
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/MarcSLM
 )
-
 # ==============================================================================
 # Summary
 # ==============================================================================
