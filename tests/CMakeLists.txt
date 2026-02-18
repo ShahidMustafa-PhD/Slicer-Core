@@ -47,3 +47,22 @@ if(TEST_SOURCES)
 else()
     message(STATUS "No test sources found - skipping test executable creation")
 endif()
+
+# Post-build: Copy vcpkg DLLs to test output directory (Windows only)
+if(WIN32)
+    set(VCPKG_DLLS
+        "$ENV{VCPKG_ROOT}/installed/x64-windows/bin/gtest.dll"
+        "$ENV{VCPKG_ROOT}/installed/x64-windows/bin/gmock.dll"
+        "$ENV{VCPKG_ROOT}/installed/x64-windows/bin/tbb12.dll"
+        # Add more DLLs here if needed
+    )
+    foreach(dll ${VCPKG_DLLS})
+        if(EXISTS ${dll})
+            add_custom_command(TARGET MarcSLM_Tests POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${dll}"
+                    $<TARGET_FILE_DIR:MarcSLM_Tests>
+            )
+        endif()
+    endforeach()
+endif()
