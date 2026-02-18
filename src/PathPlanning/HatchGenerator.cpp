@@ -120,9 +120,10 @@ HatchGenerator::generateHatches(const Marc::Polygon& polygon, double angle) cons
     Clipper2Lib::Path64 contour;
     contour.reserve(polygon.points.size());
     for (const auto& pt : polygon.points) {
-        contour.emplace_back(
-            MarcSLM::Core::mmToClipperUnits(static_cast<double>(pt.x)),
-            MarcSLM::Core::mmToClipperUnits(static_cast<double>(pt.y)));
+        Clipper2Lib::Point64 p;
+        p.x = MarcSLM::Core::mmToClipperUnits(static_cast<double>(pt.x));
+        p.y = MarcSLM::Core::mmToClipperUnits(static_cast<double>(pt.y));
+        contour.push_back(p);
     }
 
     return generateHatches(contour, {}, angle);
@@ -281,13 +282,15 @@ HatchGenerator::clipLinesToPolygon(const std::vector<Marc::Line>& lines,
 
     for (const auto& line : lines) {
         Clipper2Lib::Path64 path;
-        path.emplace_back(
-            MarcSLM::Core::mmToClipperUnits(static_cast<double>(line.a.x)),
-            MarcSLM::Core::mmToClipperUnits(static_cast<double>(line.a.y)));
-        path.emplace_back(
-            MarcSLM::Core::mmToClipperUnits(static_cast<double>(line.b.x)),
-            MarcSLM::Core::mmToClipperUnits(static_cast<double>(line.b.y)));
-        openSubject.push_back(std::move(path));
+        Clipper2Lib::Point64 pa;
+        pa.x = MarcSLM::Core::mmToClipperUnits(static_cast<double>(line.a.x));
+        pa.y = MarcSLM::Core::mmToClipperUnits(static_cast<double>(line.a.y));
+        path.push_back(pa);
+        Clipper2Lib::Point64 pb;
+        pb.x = MarcSLM::Core::mmToClipperUnits(static_cast<double>(line.b.x));
+        pb.y = MarcSLM::Core::mmToClipperUnits(static_cast<double>(line.b.y));
+        path.push_back(pb);
+         openSubject.push_back(std::move(path));
     }
 
     // Build clip polygon (contour + holes)
@@ -365,14 +368,30 @@ HatchGenerator::makeRectanglePath(double xMin, double yMin,
                                    double xMax, double yMax) const {
     Clipper2Lib::Path64 rect;
     rect.reserve(4);
-    rect.emplace_back(MarcSLM::Core::mmToClipperUnits(xMin),
-                      MarcSLM::Core::mmToClipperUnits(yMin));
-    rect.emplace_back(MarcSLM::Core::mmToClipperUnits(xMax),
-                      MarcSLM::Core::mmToClipperUnits(yMin));
-    rect.emplace_back(MarcSLM::Core::mmToClipperUnits(xMax),
-                      MarcSLM::Core::mmToClipperUnits(yMax));
-    rect.emplace_back(MarcSLM::Core::mmToClipperUnits(xMin),
-                      MarcSLM::Core::mmToClipperUnits(yMax));
+    {
+        Clipper2Lib::Point64 p;
+        p.x = MarcSLM::Core::mmToClipperUnits(xMin);
+        p.y = MarcSLM::Core::mmToClipperUnits(yMin);
+        rect.push_back(p);
+    }
+    {
+        Clipper2Lib::Point64 p;
+        p.x = MarcSLM::Core::mmToClipperUnits(xMax);
+        p.y = MarcSLM::Core::mmToClipperUnits(yMin);
+        rect.push_back(p);
+    }
+    {
+        Clipper2Lib::Point64 p;
+        p.x = MarcSLM::Core::mmToClipperUnits(xMax);
+        p.y = MarcSLM::Core::mmToClipperUnits(yMax);
+        rect.push_back(p);
+    }
+    {
+        Clipper2Lib::Point64 p;
+        p.x = MarcSLM::Core::mmToClipperUnits(xMin);
+        p.y = MarcSLM::Core::mmToClipperUnits(yMax);
+        rect.push_back(p);
+    }
     return rect;
 }
 
