@@ -78,12 +78,53 @@ endif()
 # ==============================================================================
 # Dependency Resolution (vcpkg integration)
 # ==============================================================================
-
 find_package(manifold CONFIG REQUIRED)
 find_package(assimp CONFIG REQUIRED)
 find_package(Clipper2 CONFIG REQUIRED)
-find_package(glm CONFIG REQUIRED)
 find_package(TBB CONFIG REQUIRED)
+find_package(glm CONFIG REQUIRED)
+
+# Try to find Eigen3; if not found, attempt to locate it in vcpkg installed path
+find_package(Eigen3 CONFIG QUIET)
+if(NOT TARGET Eigen3::Eigen)
+    message(STATUS "Eigen3 not found by CMake find_package - attempting vcpkg paths...")
+    # Determine vcpkg root and triplet from environment if available
+    if(DEFINED ENV{VCPKG_ROOT})
+        set(_vcpkg_root $ENV{VCPKG_ROOT})
+    elseif(DEFINED ENV{VCPKG_ROOT})
+        set(_vcpkg_root $ENV{VCPKG_ROOT})
+    else()
+        set(_vcpkg_root "")
+    endif()
+
+    if(DEFINED ENV{VCPKG_DEFAULT_TRIPLET})
+        set(_vcpkg_triplet $ENV{VCPKG_DEFAULT_TRIPLET})
+    elseif(DEFINED ENV{VCPKG_TARGET_TRIPLET})
+        set(_vcpkg_triplet $ENV{VCPKG_TARGET_TRIPLET})
+    else()
+        # Default to x64-windows which is the common triplet for VS x64 builds
+        set(_vcpkg_triplet "x64-windows")
+    endif()
+
+    if(_vcpkg_root STREQUAL "")
+        message(WARNING "VCPKG_ROOT not set; if Eigen3 is installed via vcpkg, set VCPKG_ROOT environment variable to the vcpkg folder or configure CMake with -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake")
+    else()
+        set(_vcpkg_eigen_dir "${_vcpkg_root}/installed/${_vcpkg_triplet}/share/eigen3")
+        if(EXISTS "${_vcpkg_eigen_dir}/Eigen3Config.cmake" OR EXISTS "${_vcpkg_eigen_dir}/eigen3-config.cmake")
+            list(APPEND CMAKE_PREFIX_PATH "${_vcpkg_eigen_dir}")
+            message(STATUS "Added vcpkg Eigen3 path to CMAKE_PREFIX_PATH: ${_vcpkg_eigen_dir}")
+        else()
+            message(WARNING "Eigen3Config.cmake not found in expected vcpkg path: ${_vcpkg_eigen_dir}")
+            message(STATUS "You can also pass -DEigen3_DIR=<path-to-eigen3-share-dir> to CMake or use the vcpkg toolchain file")
+        endif()
+    endif()
+
+    # Retry find
+    find_package(Eigen3 CONFIG REQUIRED)
+else()
+    message(STATUS "Found Eigen3 (target Eigen3::Eigen)")
+endif()
+
 
 if(MARCSLM_BUILD_TESTS)
     find_package(GTest CONFIG REQUIRED)
@@ -97,6 +138,14 @@ set(MARCSLM_CORE_HEADERS
     include/MarcSLM/Core/Types.hpp
     include/MarcSLM/Core/MarcFormat.hpp
     include/MarcSLM/Core/Config.hpp
+    include/MarcSLM/Core/SlmConfig.hpp
+    include/MarcSLM/Core/SlmConfigReader.hpp
+    include/MarcSLM/Core/BuildStyleManager.hpp
+    include/MarcSLM/Core/InternalModel.hpp
+    include/MarcSLM/Core/MarcFile.hpp
+    include/MarcSLM/Core/SVGExporter.hpp
+    include/MarcSLM/Core/Logger.hpp
+    include/MarcSLM/Core/ErrorState.hpp
 )
 
 set(MARCSLM_GEOMETRY_HEADERS
@@ -107,34 +156,71 @@ set(MARCSLM_GEOMETRY_SOURCES
     src/Geometry/MeshProcessor.cpp
 )
 
+set(MARCSLM_IO_HEADERS
+    include/MarcSLM/IO/MeshData.hpp
+    include/MarcSLM/IO/MeshIO.hpp
+)
+
+set(MARCSLM_IO_SOURCES
+    src/IO/MeshIO.cpp
+)
+
 set(MARCSLM_THERMAL_HEADERS
-    # Will be populated as thermal classification components are added
+    include/MarcSLM/Thermal/ThermalSegmentTypes.hpp
+    include/MarcSLM/Thermal/ScanSegmentClassifier.hpp
+)
+
+set(MARCSLM_THERMAL_SOURCES
+    src/Thermal/ScanSegmentClassifier.cpp
 )
 
 set(MARCSLM_PATHPLANNING_HEADERS
-    # Will be populated as path planning components are added
+    include/MarcSLM/PathPlanning/HatchGenerator.hpp
+)
+
+set(MARCSLM_PATHPLANNING_SOURCES
+    src/PathPlanning/HatchGenerator.cpp
+)
+
+set(MARCSLM_ENGINE_HEADERS
+    include/MarcSLM/SlmPrint.hpp
+    include/MarcSLM/MarcAPI.hpp
 )
 
 set(MARCSLM_SOURCES
     # Core implementations
-    # src/Core/...
+    src/Core/Logger.cpp
+    src/Core/ErrorState.cpp
+    src/Core/SlmConfigReader.cpp
+    src/Core/BuildStyleManager.cpp
+    src/Core/MarcFile.cpp
+    src/Core/SVGExporter.cpp
     
     # Geometry implementations
     ${MARCSLM_GEOMETRY_SOURCES}
     
+    # I/O implementations
+    ${MARCSLM_IO_SOURCES}
+    
     # Thermal implementations
-    # src/Thermal/...
+    ${MARCSLM_THERMAL_SOURCES}
     
     # PathPlanning implementations
-    # src/PathPlanning/...
+    ${MARCSLM_PATHPLANNING_SOURCES}
+
+    # Engine implementations
+    src/SlmPrint.cpp
+    src/MarcAPI.cpp
 )
 
 # Combine all headers
 set(MARCSLM_ALL_HEADERS
     ${MARCSLM_CORE_HEADERS}
     ${MARCSLM_GEOMETRY_HEADERS}
+    ${MARCSLM_IO_HEADERS}
     ${MARCSLM_THERMAL_HEADERS}
     ${MARCSLM_PATHPLANNING_HEADERS}
+    ${MARCSLM_ENGINE_HEADERS}
 )
 
 # ==============================================================================
@@ -152,12 +238,41 @@ endif()
 add_library(MarcSLM::Core ALIAS MarcSLM_Core)
 
 # ==============================================================================
+# Target Definition: MarcSLM_CLI Executable (Command-Line Interface)
+# ==============================================================================
+add_executable(MarcSLM_CLI src/main.cpp)
+target_link_libraries(MarcSLM_CLI PRIVATE MarcSLM::Core)
+target_compile_features(MarcSLM_CLI PRIVATE cxx_std_17)
+
+# Set the output name to MarcSLM
+set_target_properties(MarcSLM_CLI PROPERTIES
+    OUTPUT_NAME "MarcSLM"
+)
+
+# ==============================================================================
+# Target Definition: io_example Executable (Mesh I/O Test Tool)
+# ==============================================================================
+add_executable(io_example src/io_example.cpp)
+target_link_libraries(io_example PRIVATE MarcSLM::Core)
+target_compile_features(io_example PRIVATE cxx_std_17)
+
+# ==============================================================================
 # Include Directories
 # ==============================================================================
 target_include_directories(MarcSLM_Core
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_include_directories(MarcSLM_CLI
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_include_directories(io_example
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -169,6 +284,9 @@ target_link_libraries(MarcSLM_Core
     PUBLIC
         # Math primitives
         glm::glm
+        
+        # Linear algebra
+        Eigen3::Eigen
         
         # 2D topology engine
         Clipper2::Clipper2

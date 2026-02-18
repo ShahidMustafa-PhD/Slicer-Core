@@ -11,7 +11,9 @@
 #pragma once
 
 #include <assimp/Importer.hpp>
+#include <assimp/scene.h>
 #include <manifold/manifold.h>
+#include <manifold/common.h>
 #include <tbb/parallel_for.h>
 
 #include "MarcSLM/Core/MarcFormat.hpp"
@@ -137,7 +139,7 @@ public:
     /// @brief Check if a valid mesh is currently loaded
     /// @return true if mesh is loaded and manifold
     [[nodiscard]] bool hasValidMesh() const noexcept {
-        return mesh_ && mesh_->Status() == manifold::Error::NoError;
+        return mesh_ && mesh_->Status() == manifold::Manifold::Error::NoError;
     }
 
     /// @brief Get bounding box of loaded mesh
@@ -205,9 +207,9 @@ public:
     /// @throws MeshProcessingError if no valid mesh is loaded
     [[nodiscard]] LayerStack sliceAtHeights(const std::vector<float>& zHeights);
 
-private:
+public:
     // =========================================================================
-    // Private Data Members
+    // Public Data Members (for testing/access)
     // =========================================================================
 
     /// @brief The loaded and validated 3D mesh
@@ -216,6 +218,7 @@ private:
     /// @brief Cached bounding box (computed once after loading)
     mutable std::optional<manifold::Box> bbox_;
 
+private:
     // =========================================================================
     // Private Helper Methods
     // =========================================================================
@@ -225,18 +228,18 @@ private:
     /// @return Manifold MeshGL ready for Manifold construction
     [[nodiscard]] manifold::MeshGL assimpToManifoldMesh(const aiMesh* mesh) const;
 
-    /// @brief Convert Manifold CrossSection to Marc::Core::Slice
+    /// @brief Convert Manifold CrossSection to Marc::Slice
     /// @param cs Manifold cross-section at single Z-height
     /// @param zHeight Z-coordinate for metadata
     /// @param layerIndex Layer index for metadata
-    /// @return Marc::Core::Slice with contour and holes
+    /// @return Marc::Slice with contour and holes
     ///
     /// Conversion Process:
     ///   1. Extract polygons from CrossSection using ToPolygons()
     ///   2. Convert glm::vec2 ? Clipper2Lib::Point64 (scale by 1000)
     ///   3. Use Clipper2Lib::PolyTree64 to identify contours vs holes
     ///   4. Populate Marc::Core::Slice structure
-    [[nodiscard]] Marc::Core::Slice
+    [[nodiscard]] Marc::Slice
     manifoldToMarcSlice(const manifold::Polygons& polygons,
                        double zHeight, uint32_t layerIndex) const;
 

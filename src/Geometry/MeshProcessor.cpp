@@ -75,38 +75,38 @@ MeshProcessor::loadMesh(const std::string& filePath) {
     auto manifoldPtr = std::make_unique<manifold::Manifold>(manifoldMesh);
 
     // Validate the manifold
-    manifold::Error status = manifoldPtr->Status();
-    if (status != manifold::Error::NoError) {
+    manifold::Manifold::Error status = manifoldPtr->Status();
+    if (status != manifold::Manifold::Error::NoError) {
         std::string errorMsg = "Manifold creation failed with status: ";
         switch (status) {
-            case manifold::Error::NonFiniteVertex:
+            case manifold::Manifold::Error::NonFiniteVertex:
                 errorMsg += "Non-finite vertex";
                 break;
-            case manifold::Error::NotManifold:
+            case manifold::Manifold::Error::NotManifold:
                 errorMsg += "Not manifold";
                 break;
-            case manifold::Error::VertexOutOfBounds:
+            case manifold::Manifold::Error::VertexOutOfBounds:
                 errorMsg += "Vertex out of bounds";
                 break;
-            case manifold::Error::PropertiesWrongLength:
+            case manifold::Manifold::Error::PropertiesWrongLength:
                 errorMsg += "Properties wrong length";
                 break;
-            case manifold::Error::MissingPositionProperties:
+            case manifold::Manifold::Error::MissingPositionProperties:
                 errorMsg += "Missing position properties";
                 break;
-            case manifold::Error::MergeVectorsDifferentLengths:
+            case manifold::Manifold::Error::MergeVectorsDifferentLengths:
                 errorMsg += "Merge vectors different lengths";
                 break;
-            case manifold::Error::MergeIndexOutOfBounds:
+            case manifold::Manifold::Error::MergeIndexOutOfBounds:
                 errorMsg += "Merge index out of bounds";
                 break;
-            case manifold::Error::TransformWrongLength:
+            case manifold::Manifold::Error::TransformWrongLength:
                 errorMsg += "Transform wrong length";
                 break;
-            case manifold::Error::RunIndexWrongLength:
+            case manifold::Manifold::Error::RunIndexWrongLength:
                 errorMsg += "Run index wrong length";
                 break;
-            case manifold::Error::FaceIDWrongLength:
+            case manifold::Manifold::Error::FaceIDWrongLength:
                 errorMsg += "Face ID wrong length";
                 break;
             default:
@@ -328,9 +328,9 @@ LayerStack MeshProcessor::sliceAtHeights(const std::vector<float>& zHeights) {
 // Private Helper: Manifold to Marc Conversion
 // ==============================================================================
 
-Marc::Core::Slice MeshProcessor::manifoldToMarcSlice(const manifold::Polygons& polygons,
+Marc::Slice MeshProcessor::manifoldToMarcSlice(const manifold::Polygons& polygons,
                                                     double zHeight, uint32_t layerIndex) const {
-    Marc::Core::Slice result;
+    Marc::Slice result;
 
     if (polygons.empty()) {
         return result;  // Empty slice
@@ -348,10 +348,12 @@ Marc::Core::Slice MeshProcessor::manifoldToMarcSlice(const manifold::Polygons& p
         Clipper2Lib::Path64 path;
         path.reserve(simplePoly.size());
 
-        for (const glm::vec2& pt : simplePoly) {
+        for (const manifold::vec2& pt : simplePoly) {
             // Convert mm to microns (integer coordinates)
             const int64_t x = static_cast<int64_t>(pt.x * 1000.0);
             const int64_t y = static_cast<int64_t>(pt.y * 1000.0);
+            // Clipper2 Point64 stores coordinates as .x and .y and
+            // provides a constructor taking (x,y). Use emplace_back for efficiency.
             path.emplace_back(x, y);
         }
 
@@ -392,7 +394,7 @@ LayerSlices MeshProcessor::createLayerFromPolygons(const manifold::Polygons& pol
 
         // Convert glm::vec2 to Marc::Point (mm scale)
         polyline.points.reserve(simplePoly.size());
-        for (const glm::vec2& pt : simplePoly) {
+        for (const manifold::vec2& pt : simplePoly) {
             polyline.points.emplace_back(static_cast<float>(pt.x),
                                        static_cast<float>(pt.y));
         }

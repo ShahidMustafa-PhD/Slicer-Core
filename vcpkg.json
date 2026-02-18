@@ -11,6 +11,10 @@
       "version>=": "5.3.1"
     },
     {
+      "name": "eigen3",
+      "version>=": "3.4.0"
+    },
+    {
       "name": "manifold",
       "version>=": "2.4.5"
     },

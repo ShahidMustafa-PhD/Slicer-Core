@@ -11,14 +11,23 @@ set(TEST_SOURCES
     test_marc_format.cpp
     test_mesh_processor.cpp
     
-    # Geometry tests (to be added)
-    # test_geometry.cpp
+    # I/O tests
+    test_mesh_io.cpp
     
-    # Thermal classification tests (to be added)
-    # test_thermal.cpp
+    # SLM Config tests
+    test_slm_config.cpp
     
-    # Path planning tests (to be added)
-    # test_pathplanning.cpp
+    # Build Style tests
+    test_build_style.cpp
+    
+    # Thermal classification tests
+    test_thermal_segments.cpp
+    
+    # MarcFile binary I/O tests
+    test_marc_file_io.cpp
+    
+    # Hatch generator tests
+    test_hatch_generator.cpp
 )
 
 # Only create test executable if we have test sources
