@@ -348,13 +348,14 @@ Marc::Slice MeshProcessor::manifoldToMarcSlice(const manifold::Polygons& polygon
         Clipper2Lib::Path64 path;
         path.reserve(simplePoly.size());
 
-        for (const manifold::vec2& pt : simplePoly) {
+        for (const manifold::vec2& v : simplePoly) {
             // Convert mm to microns (integer coordinates)
-            const int64_t x = static_cast<int64_t>(pt.x * 1000.0);
-            const int64_t y = static_cast<int64_t>(pt.y * 1000.0);
-            // Clipper2 Point64 stores coordinates as .x and .y and
-            // provides a constructor taking (x,y). Use emplace_back for efficiency.
-            path.emplace_back(x, y);
+            const int64_t x = static_cast<int64_t>(v.x * 1000.0);
+            const int64_t y = static_cast<int64_t>(v.y * 1000.0);
+            Clipper2Lib::Point64 p; // default-constructed
+            p.x = x;
+            p.y = y;
+            path.push_back(p);
         }
 
         // For now, treat all polygons as outer contours
