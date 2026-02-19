@@ -27,29 +27,25 @@ inline manifold::MeshGL eigenToManifoldMesh(const MeshData& mesh) {
     const size_t numVertices = mesh.vertexCount();
     const size_t numFaces = mesh.faceCount();
     
-    result.vertPos.reserve(numVertices * 3);
+    result.vertProperties.reserve(numVertices * 3);
     result.triVerts.reserve(numFaces * 3);
     
-    // Copy vertex positions (Eigen::MatrixXd ? std::vector<float>)
-    // Eigen: row-major N×3 matrix [mm]
-    // Manifold: flat array [x0,y0,z0, x1,y1,z1, ...]
+    // Set number of properties per vertex (just positions: x,y,z)
+    result.numProp = 3;
+    
+    // Copy vertex positions (Eigen::MatrixXd -> std::vector<float>)
     for (int i = 0; i < mesh.V.rows(); ++i) {
-        result.vertPos.push_back(static_cast<float>(mesh.V(i, 0)));  // X
-        result.vertPos.push_back(static_cast<float>(mesh.V(i, 1)));  // Y
-        result.vertPos.push_back(static_cast<float>(mesh.V(i, 2)));  // Z
+        result.vertProperties.push_back(static_cast<float>(mesh.V(i, 0)));  // X
+        result.vertProperties.push_back(static_cast<float>(mesh.V(i, 1)));  // Y
+        result.vertProperties.push_back(static_cast<float>(mesh.V(i, 2)));  // Z
     }
     
-    // Copy face indices (Eigen::MatrixXi ? std::vector<uint32_t>)
-    // Eigen: M×3 matrix [i0,i1,i2 per row]
-    // Manifold: flat array [i0,i1,i2, i3,i4,i5, ...]
+    // Copy face indices (Eigen::MatrixXi -> std::vector<uint32_t>)
     for (int i = 0; i < mesh.F.rows(); ++i) {
         result.triVerts.push_back(static_cast<uint32_t>(mesh.F(i, 0)));
         result.triVerts.push_back(static_cast<uint32_t>(mesh.F(i, 1)));
         result.triVerts.push_back(static_cast<uint32_t>(mesh.F(i, 2)));
     }
-    
-    // Optional: Copy normals if needed (currently MeshGL doesn't use them)
-    // Manifold computes normals internally during operations
     
     return result;
 }
