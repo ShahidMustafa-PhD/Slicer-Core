@@ -28,6 +28,9 @@ set(TEST_SOURCES
     
     # Hatch generator tests
     test_hatch_generator.cpp
+    
+    # Build plate tests
+    test_build_plate.cpp
 )
 
 # Only create test executable if we have test sources
