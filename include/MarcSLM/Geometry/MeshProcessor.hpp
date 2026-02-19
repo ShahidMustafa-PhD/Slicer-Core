@@ -122,19 +122,9 @@ public:
 
     /// @brief Load 3D mesh from file and convert to watertight Manifold solid
     /// @param filePath Path to 3D model file (STL, 3MF, OBJ, etc.)
-    /// @return Unique pointer to validated Manifold solid
     /// @throws MeshLoadError if file cannot be loaded or parsed
     /// @throws NonManifoldMeshError if mesh has topological issues
-    ///
-    /// Processing Steps:
-    ///   1. Load with Assimp (triangulate, join vertices, fix normals)
-    ///   2. Extract vertex/triangle data into manifold::MeshGL
-    ///   3. Create manifold::Manifold and validate
-    ///   4. Repair non-manifold edges if possible
-    ///
-    /// Supported Formats: STL, 3MF, OBJ, PLY, FBX (via Assimp)
-    [[nodiscard]] std::unique_ptr<manifold::Manifold>
-    loadMesh(const std::string& filePath);
+    void loadMesh(const std::string& filePath);
 
     /// @brief Check if a valid mesh is currently loaded
     /// @return true if mesh is loaded and manifold
