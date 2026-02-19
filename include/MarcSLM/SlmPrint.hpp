@@ -29,8 +29,8 @@ namespace MarcSLM {
 ///          to .marc binary and SVG visualisation formats.
 ///
 ///          Pipeline:
-///          1. loadMesh()      ? Load 3D model via Assimp ? Manifold
-///          2. slice()         ? Uniform/adaptive Z-plane slicing
+///          1. loadMesh()      ? Load 3D model via Assimp ? TriMesh (repair)
+///          2. slice()         ? Uniform/adaptive Z-plane slicing (triangle-plane intersection)
 ///          3. generatePaths() ? Perimeter contours + hatch infill
 ///          4. classify()      ? Thermal segment classification
 ///          5. exportMarc()    ? Binary .marc file
