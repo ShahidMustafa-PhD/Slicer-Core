@@ -167,6 +167,7 @@ set(MARCSLM_CORE_HEADERS
     include/MarcSLM/Core/SlmConfig.hpp
     include/MarcSLM/Core/SlmConfigReader.hpp
     include/MarcSLM/Core/BuildStyleManager.hpp
+    include/MarcSLM/Core/BuildPlate.hpp
     include/MarcSLM/Core/InternalModel.hpp
     include/MarcSLM/Core/MarcFile.hpp
     include/MarcSLM/Core/SVGExporter.hpp
@@ -221,6 +222,7 @@ set(MARCSLM_SOURCES
     src/Core/ErrorState.cpp
     src/Core/SlmConfigReader.cpp
     src/Core/BuildStyleManager.cpp
+    src/Core/BuildPlate.cpp
     src/Core/MarcFile.cpp
     src/Core/SVGExporter.cpp
     
