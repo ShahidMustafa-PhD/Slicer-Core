@@ -105,7 +105,7 @@ MarcErrorCode MarcAPI::updateModel() {
             return MARC_E_FAIL;
         }
 
-        // Load mesh via Assimp ? Manifold
+        // Load mesh via Assimp ? TriMesh
         if (!slmPrint_->loadMesh(models_[0].path)) {
             std::cerr << "MarcAPI: Failed to load mesh" << std::endl;
             return MARC_E_FAIL;
@@ -123,7 +123,7 @@ MarcErrorCode MarcAPI::updateModel() {
 // =========================================================================
 
 MarcErrorCode MarcAPI::rotateX(float /*angleDeg*/) {
-    // TODO: Apply rotation to the loaded Manifold mesh
+    // TODO: Apply rotation to the loaded mesh
     return MARC_S_OK;
 }
 
@@ -144,7 +144,7 @@ MarcErrorCode MarcAPI::alignXY(float /*px*/, float /*py*/) {
 }
 
 // =========================================================================
-// Pipeline Execution
+// Pipeline Execution (Single-Model Legacy Path)
 // =========================================================================
 
 MarcErrorCode MarcAPI::exportSlmFile() {
@@ -178,9 +178,69 @@ MarcErrorCode MarcAPI::exportSlmFile() {
     return MARC_S_OK;
 }
 
+// =========================================================================
+// Pipeline Execution (Build Plate Multi-Model Path)
+// =========================================================================
+
+MarcErrorCode MarcAPI::exportSlmFileBuildPlate() {
+    try {
+        // Step 1: Load configuration
+        if (!configFileJson_.empty()) {
+            if (!slmPrint_->loadSlmConfig(configFileJson_)) {
+                std::cerr << "MarcAPI: Failed to load SlmConfig" << std::endl;
+                return MARC_E_FAIL;
+            }
+        }
+
+        if (models_.empty()) {
+            std::cerr << "MarcAPI: No models set" << std::endl;
+            return MARC_E_FAIL;
+        }
+
+        // Step 2: Add all models to build plate
+        size_t added = slmPrint_->addModelsToBuildPlate(models_);
+        if (added == 0) {
+            std::cerr << "MarcAPI: Failed to add models to build plate" << std::endl;
+            return MARC_E_FAIL;
+        }
+        std::cout << "MarcAPI: Added " << added << " of " << models_.size()
+                  << " models to build plate" << std::endl;
+
+        // Determine output directory
+        std::string outputDir = std::filesystem::path(models_.back().path)
+                                    .parent_path().string();
+        if (outputDir.empty()) outputDir = ".";
+
+        // Step 3: Run the full build plate pipeline
+        if (!slmPrint_->processAndExportBuildPlate(outputDir)) {
+            std::cerr << "MarcAPI: Build plate pipeline failed" << std::endl;
+            return MARC_E_FAIL;
+        }
+
+        std::cout << "MarcAPI: Build plate SLM export complete" << std::endl;
+        return MARC_S_OK;
+
+    } catch (const std::exception& e) {
+        std::cerr << "MarcAPI: " << e.what() << std::endl;
+        return MARC_E_FAIL;
+    }
+}
+
 MarcErrorCode MarcAPI::arrangeBuildPlate() {
     // TODO: Implement arrangement using bounding-box packing
     return MARC_S_OK;
+}
+
+// =========================================================================
+// Build Plate Access
+// =========================================================================
+
+BuildPlate& MarcAPI::getBuildPlate() {
+    return slmPrint_->buildPlate();
+}
+
+const BuildPlate& MarcAPI::getBuildPlate() const {
+    return slmPrint_->buildPlate();
 }
 
 // =========================================================================

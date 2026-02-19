@@ -26,7 +26,11 @@ bool SlmPrint::loadSlmConfig(const std::filesystem::path& configPath) {
             std::cerr << "SlmPrint: Config file not found: " << configPath << std::endl;
             return false;
         }
-        return SlmConfigReader::loadFromFile(configPath.string(), config_);
+        bool ok = SlmConfigReader::loadFromFile(configPath.string(), config_);
+        if (ok) {
+            buildPlate_.applyConfig(config_);
+        }
+        return ok;
     } catch (const std::exception& e) {
         std::cerr << "SlmPrint: " << e.what() << std::endl;
         return false;
@@ -48,10 +52,11 @@ bool SlmPrint::loadBuildStyles(const std::filesystem::path& stylesPath) {
 
 void SlmPrint::setSlmConfig(const SlmConfig& config) {
     config_ = config;
+    buildPlate_.applyConfig(config_);
 }
 
 // =========================================================================
-// Model Loading
+// Model Loading (Single-Mesh Legacy Path)
 // =========================================================================
 
 bool SlmPrint::loadMesh(const std::string& filePath) {
@@ -71,7 +76,45 @@ bool SlmPrint::hasMesh() const noexcept {
 }
 
 // =========================================================================
-// Slicing
+// Build Plate Management (Multi-Model Path)
+// =========================================================================
+
+PrintObject* SlmPrint::addModelToBuildPlate(const InternalModel& model) {
+    buildPlate_.applyConfig(config_);
+    return buildPlate_.addModel(model);
+}
+
+size_t SlmPrint::addModelsToBuildPlate(const std::vector<InternalModel>& models) {
+    buildPlate_.applyConfig(config_);
+    return buildPlate_.addModels(models);
+}
+
+bool SlmPrint::processBuildPlate() {
+    try {
+        reportProgress("Processing build plate...", 10);
+        buildPlate_.setProgressCallback(progressCb_);
+        buildPlate_.process();
+
+        // Extract layers from build plate
+        layers_ = buildPlate_.exportLayers();
+
+        reportProgress("Build plate processing complete", 50);
+        std::cout << "SlmPrint: Build plate generated " << layers_.size()
+                  << " layers" << std::endl;
+        return !layers_.empty();
+    } catch (const std::exception& e) {
+        std::cerr << "SlmPrint: Build plate processing failed: "
+                  << e.what() << std::endl;
+        return false;
+    }
+}
+
+std::vector<Marc::Layer> SlmPrint::exportBuildPlateLayers() const {
+    return buildPlate_.exportLayers();
+}
+
+// =========================================================================
+// Slicing (Single-Mesh Legacy Path)
 // =========================================================================
 
 bool SlmPrint::slice() {
@@ -335,6 +378,52 @@ bool SlmPrint::processAndExport(const std::string& outputDir) {
     }
 
     reportProgress("Pipeline complete", 100);
+    return true;
+}
+
+bool SlmPrint::processAndExportBuildPlate(const std::string& outputDir) {
+    reportProgress("Starting build plate pipeline...", 0);
+
+    // Step 1: Process build plate (slice, surface detect, support, anchors)
+    if (!processBuildPlate()) {
+        std::cerr << "SlmPrint: Build plate processing failed" << std::endl;
+        return false;
+    }
+
+    // Step 2: Generate paths (hatches + perimeters)
+    if (!generatePaths()) {
+        std::cerr << "SlmPrint: Path generation failed" << std::endl;
+        return false;
+    }
+
+    // Step 3: Export .marc file
+    std::filesystem::path marcPath =
+        std::filesystem::path(outputDir) / "slicefile.marc";
+    if (!exportMarc(marcPath.string())) {
+        std::cerr << "SlmPrint: .marc export failed" << std::endl;
+        return false;
+    }
+
+    // Step 4: Export SVG layers
+    if (!exportSVG(outputDir)) {
+        std::cerr << "SlmPrint: SVG export failed" << std::endl;
+        return false;
+    }
+
+    // Step 5: Export classified SVG layers
+    if (!exportSegmentSVG(outputDir)) {
+        std::cerr << "SlmPrint: Segment SVG export failed" << std::endl;
+        return false;
+    }
+
+    // Step 6: Verify .marc
+    MarcFile verifyFile;
+    if (verifyFile.readFromFile(marcPath.string())) {
+        std::cout << "SlmPrint: Verified .marc file: "
+                  << verifyFile.layers.size() << " layers" << std::endl;
+    }
+
+    reportProgress("Build plate pipeline complete", 100);
     return true;
 }
 
