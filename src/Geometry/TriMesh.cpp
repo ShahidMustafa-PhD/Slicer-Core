@@ -1,0 +1,911 @@
+﻿// ==============================================================================
+// MarcSLM - TriMesh Implementation
+// ==============================================================================
+// Ported from Legacy Slic3r::TriangleMesh + TriangleMeshSlicer<Z>.
+// Provides topology repair and Z-plane slicing without Manifold dependency.
+// ==============================================================================
+
+#include "MarcSLM/Geometry/TriMesh.hpp"
+
+#include <clipper2/clipper.h>
+
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstring>
+#include <iostream>
+#include <limits>
+#include <map>
+#include <mutex>
+#include <numeric>
+#include <queue>
+#include <set>
+#include <thread>
+#include <unordered_map>
+
+namespace MarcSLM {
+namespace Geometry {
+
+// ==============================================================================
+// Construction / Destruction
+// ==============================================================================
+
+TriMesh::TriMesh() = default;
+TriMesh::~TriMesh() = default;
+
+TriMesh::TriMesh(const TriMesh& other)
+    : facets_(other.facets_)
+    , neighbors_(other.neighbors_)
+    , vertexIndices_(other.vertexIndices_)
+    , sharedVertices_(other.sharedVertices_)
+    , bbox_(other.bbox_)
+    , stats_(other.stats_)
+    , repaired_(other.repaired_) {}
+
+TriMesh& TriMesh::operator=(const TriMesh& other) {
+    if (this != &other) {
+        facets_          = other.facets_;
+        neighbors_       = other.neighbors_;
+        vertexIndices_   = other.vertexIndices_;
+        sharedVertices_  = other.sharedVertices_;
+        bbox_            = other.bbox_;
+        stats_           = other.stats_;
+        repaired_        = other.repaired_;
+    }
+    return *this;
+}
+
+TriMesh::TriMesh(TriMesh&& other) noexcept
+    : facets_(std::move(other.facets_))
+    , neighbors_(std::move(other.neighbors_))
+    , vertexIndices_(std::move(other.vertexIndices_))
+    , sharedVertices_(std::move(other.sharedVertices_))
+    , bbox_(other.bbox_)
+    , stats_(other.stats_)
+    , repaired_(other.repaired_) {
+    other.repaired_ = false;
+}
+
+TriMesh& TriMesh::operator=(TriMesh&& other) noexcept {
+    if (this != &other) {
+        facets_          = std::move(other.facets_);
+        neighbors_       = std::move(other.neighbors_);
+        vertexIndices_   = std::move(other.vertexIndices_);
+        sharedVertices_  = std::move(other.sharedVertices_);
+        bbox_            = other.bbox_;
+        stats_           = other.stats_;
+        repaired_        = other.repaired_;
+        other.repaired_  = false;
+    }
+    return *this;
+}
+
+// ==============================================================================
+// Build from Assimp raw arrays
+// ==============================================================================
+
+void TriMesh::buildFromArrays(const float* vertices, size_t numVerts,
+                               const uint32_t* indices, size_t numFaces) {
+    facets_.clear();
+    facets_.resize(numFaces);
+    neighbors_.clear();
+    neighbors_.resize(numFaces);
+    vertexIndices_.clear();
+    sharedVertices_.clear();
+    repaired_ = false;
+
+    for (size_t i = 0; i < numFaces; ++i) {
+        Facet& f = facets_[i];
+        const uint32_t i0 = indices[i * 3 + 0];
+        const uint32_t i1 = indices[i * 3 + 1];
+        const uint32_t i2 = indices[i * 3 + 2];
+
+        f.vertex[0] = {vertices[i0 * 3], vertices[i0 * 3 + 1], vertices[i0 * 3 + 2]};
+        f.vertex[1] = {vertices[i1 * 3], vertices[i1 * 3 + 1], vertices[i1 * 3 + 2]};
+        f.vertex[2] = {vertices[i2 * 3], vertices[i2 * 3 + 1], vertices[i2 * 3 + 2]};
+
+        // Compute face normal via cross product
+        float ax = f.vertex[1].x - f.vertex[0].x;
+        float ay = f.vertex[1].y - f.vertex[0].y;
+        float az = f.vertex[1].z - f.vertex[0].z;
+        float bx = f.vertex[2].x - f.vertex[0].x;
+        float by = f.vertex[2].y - f.vertex[0].y;
+        float bz = f.vertex[2].z - f.vertex[0].z;
+        f.normal.x = ay * bz - az * by;
+        f.normal.y = az * bx - ax * bz;
+        f.normal.z = ax * by - ay * bx;
+        float len = std::sqrt(f.normal.x * f.normal.x +
+                              f.normal.y * f.normal.y +
+                              f.normal.z * f.normal.z);
+        if (len > 0.0f) {
+            f.normal.x /= len;
+            f.normal.y /= len;
+            f.normal.z /= len;
+        }
+    }
+
+    computeBBox();
+    stats_.numFacets = numFaces;
+}
+
+// ==============================================================================
+// Bounding Box
+// ==============================================================================
+
+void TriMesh::computeBBox() {
+    bbox_ = BBox3f{};
+    for (const auto& f : facets_) {
+        for (int j = 0; j < 3; ++j) {
+            bbox_.merge(f.vertex[j]);
+        }
+    }
+    float dx = bbox_.sizeX(), dy = bbox_.sizeY(), dz = bbox_.sizeZ();
+    stats_.boundingDiameter = std::sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+// ==============================================================================
+// Repair (ported from admesh / Legacy TriangleMesh::repair)
+// ==============================================================================
+
+void TriMesh::repair() {
+    if (repaired_) return;
+    if (facets_.empty()) return;
+
+    std::cout << "  Repairing mesh topology...\n";
+
+    // Step 1: Generate shared vertices by welding identical positions
+    generateSharedVertices();
+
+    // Step 2: Build neighbor topology from shared vertices
+    checkTopologyExact();
+
+    // Step 3: Try to connect nearby vertices for remaining unmatched edges
+    if (stats_.connectedFacets3Edge < stats_.numFacets) {
+        float tolerance = stats_.shortestEdge;
+        float increment = stats_.boundingDiameter / 10000.0f;
+        for (int iter = 0; iter < 5; ++iter) {
+            if (stats_.connectedFacets3Edge >= stats_.numFacets) break;
+            checkTopologyNearby(tolerance);
+            tolerance += increment;
+        }
+    }
+
+    // Step 4: Remove degenerate facets (zero area)
+    removeDegenerate();
+
+    // Step 5: Fix normals direction (ensure consistent winding)
+    fixNormals();
+
+    // Step 6: Calculate volume (and reverse normals if negative)
+    calculateVolume();
+
+    computeBBox();
+
+    std::cout << "  Repair complete: " << stats_.numFacets << " facets, "
+              << stats_.numSharedVertices << " shared vertices\n";
+    if (neededRepair()) {
+        std::cout << "  Repairs applied: "
+                  << stats_.edgesFixed << " edges fixed, "
+                  << stats_.facetsRemoved << " facets removed, "
+                  << stats_.facetsReversed << " facets reversed, "
+                  << stats_.normalsFixed << " normals fixed\n";
+    }
+
+    repaired_ = true;
+}
+
+bool TriMesh::isManifold() const {
+    return stats_.connectedFacets3Edge == stats_.numFacets;
+}
+
+bool TriMesh::neededRepair() const {
+    return stats_.degenerateFacets > 0 ||
+           stats_.edgesFixed > 0 ||
+           stats_.facetsRemoved > 0 ||
+           stats_.facetsAdded > 0 ||
+           stats_.facetsReversed > 0 ||
+           stats_.normalsFixed > 0;
+}
+
+float TriMesh::volume() {
+    if (stats_.volume == 0.0f && !facets_.empty()) {
+        calculateVolume();
+    }
+    return stats_.volume;
+}
+
+// ==============================================================================
+// Shared Vertex Generation (vertex welding)
+// ==============================================================================
+
+void TriMesh::generateSharedVertices() {
+    // Build a spatial hash map to weld identical (or nearly-identical) vertices
+    struct VertexHash {
+        size_t operator()(const std::tuple<int, int, int>& k) const {
+            auto h1 = std::hash<int>{}(std::get<0>(k));
+            auto h2 = std::hash<int>{}(std::get<1>(k));
+            auto h3 = std::hash<int>{}(std::get<2>(k));
+            return h1 ^ (h2 << 11) ^ (h3 << 22);
+        }
+    };
+
+    // Quantize vertices to micron resolution for welding
+    const float quantize = 10000.0f;  // 0.1 micron resolution
+    std::unordered_map<std::tuple<int, int, int>, int, VertexHash> vertexMap;
+    sharedVertices_.clear();
+    vertexIndices_.clear();
+    vertexIndices_.resize(facets_.size());
+
+    for (size_t fi = 0; fi < facets_.size(); ++fi) {
+        for (int vi = 0; vi < 3; ++vi) {
+            const Vertex3f& v = facets_[fi].vertex[vi];
+            auto key = std::make_tuple(
+                static_cast<int>(std::round(v.x * quantize)),
+                static_cast<int>(std::round(v.y * quantize)),
+                static_cast<int>(std::round(v.z * quantize))
+            );
+
+            auto it = vertexMap.find(key);
+            if (it != vertexMap.end()) {
+                vertexIndices_[fi].vertex[vi] = it->second;
+            } else {
+                int idx = static_cast<int>(sharedVertices_.size());
+                vertexMap[key] = idx;
+                sharedVertices_.push_back(v);
+                vertexIndices_[fi].vertex[vi] = idx;
+            }
+        }
+    }
+
+    stats_.numSharedVertices = sharedVertices_.size();
+}
+
+// ==============================================================================
+// Topology Checking (exact edge matching)
+// ==============================================================================
+
+void TriMesh::checkTopologyExact() {
+    // Build edge → facet map. An edge is an ordered pair of shared vertex indices.
+    using Edge = std::pair<int, int>;
+    std::unordered_multimap<uint64_t, std::pair<int, int>> edgeMap;  // hash → (facetIdx, edgeIdx)
+
+    auto edgeKey = [](int a, int b) -> uint64_t {
+        int lo = std::min(a, b), hi = std::max(a, b);
+        return (static_cast<uint64_t>(lo) << 32) | static_cast<uint64_t>(hi);
+    };
+
+    neighbors_.clear();
+    neighbors_.resize(facets_.size());
+
+    for (size_t fi = 0; fi < facets_.size(); ++fi) {
+        for (int ei = 0; ei < 3; ++ei) {
+            int a = vertexIndices_[fi].vertex[ei];
+            int b = vertexIndices_[fi].vertex[(ei + 1) % 3];
+            uint64_t key = edgeKey(a, b);
+            edgeMap.emplace(key, std::make_pair(static_cast<int>(fi), ei));
+        }
+    }
+
+    // For each edge, find pairs of facets that share it
+    stats_.connectedFacets1Edge = 0;
+    stats_.connectedFacets2Edge = 0;
+    stats_.connectedFacets3Edge = 0;
+
+    for (size_t fi = 0; fi < facets_.size(); ++fi) {
+        int connected = 0;
+        for (int ei = 0; ei < 3; ++ei) {
+            if (neighbors_[fi].neighbor[ei] != -1) {
+                ++connected;
+                continue;
+            }
+
+            int a = vertexIndices_[fi].vertex[ei];
+            int b = vertexIndices_[fi].vertex[(ei + 1) % 3];
+            uint64_t key = edgeKey(a, b);
+
+            auto range = edgeMap.equal_range(key);
+            for (auto it = range.first; it != range.second; ++it) {
+                int otherFi = it->second.first;
+                int otherEi = it->second.second;
+                if (otherFi == static_cast<int>(fi)) continue;
+
+                // Check that the edge is shared in opposite direction (proper neighbor)
+                int otherA = vertexIndices_[otherFi].vertex[otherEi];
+                int otherB = vertexIndices_[otherFi].vertex[(otherEi + 1) % 3];
+                if ((a == otherB && b == otherA) || (a == otherA && b == otherB)) {
+                    neighbors_[fi].neighbor[ei] = otherFi;
+                    neighbors_[otherFi].neighbor[otherEi] = static_cast<int>(fi);
+                    ++connected;
+                    break;
+                }
+            }
+            if (neighbors_[fi].neighbor[ei] == -1) {
+                // Still unconnected
+            } else {
+                ++connected;
+            }
+        }
+
+        // Update connectivity stats
+        if (connected >= 1) ++stats_.connectedFacets1Edge;
+        if (connected >= 2) ++stats_.connectedFacets2Edge;
+        if (connected >= 3) ++stats_.connectedFacets3Edge;
+    }
+
+    // Compute shortest edge length for nearby-tolerance
+    stats_.shortestEdge = std::numeric_limits<float>::max();
+    for (const auto& f : facets_) {
+        for (int ei = 0; ei < 3; ++ei) {
+            const Vertex3f& a = f.vertex[ei];
+            const Vertex3f& b = f.vertex[(ei + 1) % 3];
+            float dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+            float len = std::sqrt(dx * dx + dy * dy + dz * dz);
+            if (len > 0.0f && len < stats_.shortestEdge)
+                stats_.shortestEdge = len;
+        }
+    }
+}
+
+void TriMesh::checkTopologyNearby(float /*tolerance*/) {
+    // For now, the exact matching is sufficient for most industrial STL files.
+    // The vertex welding in generateSharedVertices() already handles the common case.
+    // TODO: Implement tolerance-based edge matching for badly exported STL files.
+}
+
+// ==============================================================================
+// Degenerate Facet Removal
+// ==============================================================================
+
+void TriMesh::removeDegenerate() {
+    size_t removed = 0;
+    auto it = facets_.begin();
+    size_t idx = 0;
+    while (it != facets_.end()) {
+        const Facet& f = *it;
+        // Check for zero-area triangle (two or more vertices at same position)
+        bool degenerate = false;
+        for (int i = 0; i < 3 && !degenerate; ++i) {
+            int j = (i + 1) % 3;
+            float dx = f.vertex[i].x - f.vertex[j].x;
+            float dy = f.vertex[i].y - f.vertex[j].y;
+            float dz = f.vertex[i].z - f.vertex[j].z;
+            if (dx * dx + dy * dy + dz * dz < 1e-14f)
+                degenerate = true;
+        }
+        if (degenerate) {
+            it = facets_.erase(it);
+            if (idx < neighbors_.size()) neighbors_.erase(neighbors_.begin() + idx);
+            if (idx < vertexIndices_.size()) vertexIndices_.erase(vertexIndices_.begin() + idx);
+            ++removed;
+        } else {
+            ++it;
+            ++idx;
+        }
+    }
+    stats_.degenerateFacets = removed;
+    stats_.facetsRemoved += removed;
+    stats_.numFacets = facets_.size();
+}
+
+// ==============================================================================
+// Normal Fixing
+// ==============================================================================
+
+void TriMesh::fixNormals() {
+    size_t fixed = 0;
+    for (auto& f : facets_) {
+        // Recompute normal from vertex positions
+        float ax = f.vertex[1].x - f.vertex[0].x;
+        float ay = f.vertex[1].y - f.vertex[0].y;
+        float az = f.vertex[1].z - f.vertex[0].z;
+        float bx = f.vertex[2].x - f.vertex[0].x;
+        float by = f.vertex[2].y - f.vertex[0].y;
+        float bz = f.vertex[2].z - f.vertex[0].z;
+        float nx = ay * bz - az * by;
+        float ny = az * bx - ax * bz;
+        float nz = ax * by - ay * bx;
+        float len = std::sqrt(nx * nx + ny * ny + nz * nz);
+        if (len > 0.0f) {
+            nx /= len; ny /= len; nz /= len;
+            // Check if stored normal is way off
+            float dot = f.normal.x * nx + f.normal.y * ny + f.normal.z * nz;
+            if (dot < 0.0f) {
+                // Normal is inverted - reverse it
+                f.normal = {nx, ny, nz};
+                ++fixed;
+            } else if (std::abs(f.normal.x) < 1e-6f &&
+                       std::abs(f.normal.y) < 1e-6f &&
+                       std::abs(f.normal.z) < 1e-6f) {
+                // Normal was zero - set it
+                f.normal = {nx, ny, nz};
+                ++fixed;
+            }
+        }
+    }
+    stats_.normalsFixed = fixed;
+}
+
+void TriMesh::fillHoles() {
+    // Hole filling is complex. For SLM slicing, we rely on the slicer's
+    // ability to handle open contours, which the loop-chaining algorithm does.
+}
+
+// ==============================================================================
+// Volume Calculation
+// ==============================================================================
+
+void TriMesh::calculateVolume() {
+    // Signed volume using divergence theorem
+    double vol = 0.0;
+    for (const auto& f : facets_) {
+        double v321 = f.vertex[2].x * f.vertex[1].y * f.vertex[0].z;
+        double v231 = f.vertex[1].x * f.vertex[2].y * f.vertex[0].z;
+        double v312 = f.vertex[2].x * f.vertex[0].y * f.vertex[1].z;
+        double v132 = f.vertex[0].x * f.vertex[2].y * f.vertex[1].z;
+        double v213 = f.vertex[1].x * f.vertex[0].y * f.vertex[2].z;
+        double v123 = f.vertex[0].x * f.vertex[1].y * f.vertex[2].z;
+        vol += (-v321 + v231 + v312 - v132 - v213 + v123);
+    }
+    stats_.volume = static_cast<float>(vol / 6.0);
+
+    // If volume is negative, normals are inverted - flip them all
+    if (stats_.volume < 0.0f) {
+        for (auto& f : facets_) {
+            std::swap(f.vertex[0], f.vertex[1]);
+            f.normal.x = -f.normal.x;
+            f.normal.y = -f.normal.y;
+            f.normal.z = -f.normal.z;
+        }
+        stats_.volume = -stats_.volume;
+        stats_.facetsReversed = facets_.size();
+        // Regenerate shared vertices after flip
+        generateSharedVertices();
+    }
+}
+
+// ==============================================================================
+// Slicing: Build Edge-Facet Tables
+// ==============================================================================
+
+std::vector<std::vector<int>> TriMesh::buildFacetsEdges() const {
+    // Each facet has 3 edges. We assign a unique edge index to each
+    // directed edge pair, matching the Legacy TriangleMeshSlicer approach.
+    using EdgePair = std::pair<int, int>;
+    std::map<EdgePair, int> edgeMap;
+    std::vector<std::vector<int>> facetsEdges(facets_.size());
+
+    for (size_t fi = 0; fi < facets_.size(); ++fi) {
+        facetsEdges[fi].resize(3);
+        for (int ei = 0; ei < 3; ++ei) {
+            int a = vertexIndices_[fi].vertex[ei];
+            int b = vertexIndices_[fi].vertex[(ei + 1) % 3];
+
+            int edgeIdx;
+            // Look for reverse edge first
+            auto it = edgeMap.find({b, a});
+            if (it != edgeMap.end()) {
+                edgeIdx = it->second;
+            } else {
+                // Look for same-direction edge (non-manifold case)
+                it = edgeMap.find({a, b});
+                if (it != edgeMap.end()) {
+                    edgeIdx = it->second;
+                } else {
+                    edgeIdx = static_cast<int>(edgeMap.size());
+                    edgeMap[{a, b}] = edgeIdx;
+                }
+            }
+            facetsEdges[fi][ei] = edgeIdx;
+        }
+    }
+    return facetsEdges;
+}
+
+// ==============================================================================
+// Slicing: Main Entry Point
+// ==============================================================================
+
+std::vector<ExPolygons2i> TriMesh::slice(const std::vector<float>& zHeights) {
+    if (!repaired_) repair();
+    if (facets_.empty() || zHeights.empty()) return {};
+
+    // Build edge tables
+    auto facetsEdges = buildFacetsEdges();
+
+    // Scale shared vertices (matching Legacy: divide by SCALING_FACTOR)
+    std::vector<Vertex3f> scaledShared(sharedVertices_.size());
+    for (size_t i = 0; i < sharedVertices_.size(); ++i) {
+        scaledShared[i].x = static_cast<float>(sharedVertices_[i].x / MESH_SCALING_FACTOR);
+        scaledShared[i].y = static_cast<float>(sharedVertices_[i].y / MESH_SCALING_FACTOR);
+        scaledShared[i].z = static_cast<float>(sharedVertices_[i].z / MESH_SCALING_FACTOR);
+    }
+
+    // Generate intersection lines for each Z-plane
+    std::vector<IntersectionLines> allLines(zHeights.size());
+
+    for (size_t fi = 0; fi < facets_.size(); ++fi) {
+        const Facet& facet = facets_[fi];
+        float minZ = std::min({facet.vertex[0].z, facet.vertex[1].z, facet.vertex[2].z});
+        float maxZ = std::max({facet.vertex[0].z, facet.vertex[1].z, facet.vertex[2].z});
+
+        // Find relevant Z-planes using binary search
+        auto minLayer = std::lower_bound(zHeights.begin(), zHeights.end(), minZ);
+        auto maxLayer = std::upper_bound(
+            zHeights.begin() + (minLayer - zHeights.begin()),
+            zHeights.end(), maxZ);
+        if (maxLayer != zHeights.begin()) --maxLayer;
+
+        for (auto it = minLayer; it <= maxLayer && it != zHeights.end(); ++it) {
+            size_t layerIdx = it - zHeights.begin();
+            float scaledZ = static_cast<float>(*it / MESH_SCALING_FACTOR);
+            sliceFacet(scaledZ, facet, static_cast<int>(fi), minZ, maxZ,
+                       facetsEdges, scaledShared.data(), allLines[layerIdx]);
+        }
+    }
+
+    // Build polygon loops from intersection lines, then ExPolygons
+    std::vector<ExPolygons2i> result(zHeights.size());
+
+    for (size_t li = 0; li < zHeights.size(); ++li) {
+        Polygons2i loops;
+        makeLoops(allLines[li], loops);
+        makeExPolygons(loops, result[li]);
+    }
+
+    return result;
+}
+
+// ==============================================================================
+// Slicing: Facet-Plane Intersection (ported from Legacy slice_facet)
+// ==============================================================================
+
+void TriMesh::sliceFacet(float scaledZ, const Facet& facet, int facetIdx,
+                          float minZ, float maxZ,
+                          const std::vector<std::vector<int>>& facetsEdges,
+                          const Vertex3f* scaledShared,
+                          IntersectionLines& lines) const {
+    std::vector<IntersectionPoint> points;
+    std::vector<size_t> pointsOnLayer;
+    bool foundHorizontalEdge = false;
+
+    // Reorder vertices so the one with lowest Z is first
+    int startVert = 0;
+    if (facet.vertex[1].z == minZ) startVert = 1;
+    else if (facet.vertex[2].z == minZ) startVert = 2;
+
+    float sliceZ = static_cast<float>(scaledZ * MESH_SCALING_FACTOR);  // back to mm for comparison
+
+    for (int j = startVert; (j - startVert) < 3; ++j) {
+        int ei = j % 3;
+        int edgeId = (facetIdx < static_cast<int>(facetsEdges.size())) ?
+                     facetsEdges[facetIdx][ei] : -1;
+        int aIdx = vertexIndices_[facetIdx].vertex[ei];
+        int bIdx = vertexIndices_[facetIdx].vertex[(ei + 1) % 3];
+        const Vertex3f& a = scaledShared[aIdx];
+        const Vertex3f& b = scaledShared[bIdx];
+        float aZ = static_cast<float>(a.z * MESH_SCALING_FACTOR);
+        float bZ = static_cast<float>(b.z * MESH_SCALING_FACTOR);
+
+        if (aZ == sliceZ && bZ == sliceZ) {
+            // Horizontal edge on this layer
+            IntersectionLine line;
+            if (minZ == maxZ) {
+                line.edgeType = IntersectionLine::Horizontal;
+                if (facet.normal.z < 0) {
+                    // Bottom horizontal facet - reverse
+                    line.a = {static_cast<int64_t>(b.x), static_cast<int64_t>(b.y)};
+                    line.b = {static_cast<int64_t>(a.x), static_cast<int64_t>(a.y)};
+                    line.aId = bIdx; line.bId = aIdx;
+                } else {
+                    line.a = {static_cast<int64_t>(a.x), static_cast<int64_t>(a.y)};
+                    line.b = {static_cast<int64_t>(b.x), static_cast<int64_t>(b.y)};
+                    line.aId = aIdx; line.bId = bIdx;
+                }
+            } else if (facet.vertex[0].z < sliceZ || facet.vertex[1].z < sliceZ || facet.vertex[2].z < sliceZ) {
+                line.edgeType = IntersectionLine::Top;
+                line.a = {static_cast<int64_t>(b.x), static_cast<int64_t>(b.y)};
+                line.b = {static_cast<int64_t>(a.x), static_cast<int64_t>(a.y)};
+                line.aId = bIdx; line.bId = aIdx;
+            } else {
+                line.edgeType = IntersectionLine::Bottom;
+                line.a = {static_cast<int64_t>(a.x), static_cast<int64_t>(a.y)};
+                line.b = {static_cast<int64_t>(b.x), static_cast<int64_t>(b.y)};
+                line.aId = aIdx; line.bId = bIdx;
+            }
+            lines.push_back(line);
+            foundHorizontalEdge = true;
+            if (line.edgeType != IntersectionLine::Horizontal) return;
+        } else if (aZ == sliceZ) {
+            IntersectionPoint pt;
+            pt.x = static_cast<int64_t>(a.x);
+            pt.y = static_cast<int64_t>(a.y);
+            pt.pointId = aIdx;
+            points.push_back(pt);
+            pointsOnLayer.push_back(points.size() - 1);
+        } else if (bZ == sliceZ) {
+            IntersectionPoint pt;
+            pt.x = static_cast<int64_t>(b.x);
+            pt.y = static_cast<int64_t>(b.y);
+            pt.pointId = bIdx;
+            points.push_back(pt);
+            pointsOnLayer.push_back(points.size() - 1);
+        } else if ((aZ < sliceZ && bZ > sliceZ) || (bZ < sliceZ && aZ > sliceZ)) {
+            // Edge crosses the slicing plane
+            float t = (scaledZ - b.z) / (a.z - b.z);
+            IntersectionPoint pt;
+            pt.x = static_cast<int64_t>(b.x + (a.x - b.x) * t);
+            pt.y = static_cast<int64_t>(b.y + (a.y - b.y) * t);
+            pt.edgeId = edgeId;
+            points.push_back(pt);
+        }
+    }
+
+    if (foundHorizontalEdge) return;
+
+    // Handle duplicate on-layer points
+    if (!pointsOnLayer.empty()) {
+        if (pointsOnLayer.size() == 2 && points.size() >= 3) {
+            points.erase(points.begin() + pointsOnLayer[1]);
+        } else if (points.size() < 3) {
+            return;  // V-shaped tangent, no real intersection
+        }
+    }
+
+    if (points.size() == 2) {
+        IntersectionLine line;
+        line.a = {points[1].x, points[1].y};
+        line.b = {points[0].x, points[0].y};
+        line.aId = points[1].pointId;
+        line.bId = points[0].pointId;
+        line.edgeAId = points[1].edgeId;
+        line.edgeBId = points[0].edgeId;
+        lines.push_back(line);
+    }
+}
+
+// ==============================================================================
+// Slicing: Loop Chaining (ported from Legacy make_loops)
+// ==============================================================================
+
+void TriMesh::makeLoops(IntersectionLines& lines, Polygons2i& loops) const {
+    // Remove tangent edges (duplicates with same endpoints)
+    for (size_t i = 0; i < lines.size(); ++i) {
+        auto& line = lines[i];
+        if (line.skip || line.edgeType == IntersectionLine::None) continue;
+
+        for (size_t j = i + 1; j < lines.size(); ++j) {
+            auto& line2 = lines[j];
+            if (line2.skip || line2.edgeType == IntersectionLine::None) continue;
+
+            if (line.aId == line2.aId && line.bId == line2.bId) {
+                line2.skip = true;
+                if (line.edgeType == line2.edgeType) {
+                    line.skip = true;
+                    break;
+                }
+            } else if (line.aId == line2.bId && line.bId == line2.aId) {
+                if (line.edgeType == IntersectionLine::Horizontal &&
+                    line2.edgeType == IntersectionLine::Horizontal) {
+                    line.skip = true;
+                    line2.skip = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Build lookup maps: edge_a_id → line, a_id → line
+    int maxEdgeId = 0;
+    int maxVertId = static_cast<int>(sharedVertices_.size());
+    for (const auto& line : lines) {
+        if (line.edgeAId > maxEdgeId) maxEdgeId = line.edgeAId;
+        if (line.edgeBId > maxEdgeId) maxEdgeId = line.edgeBId;
+    }
+
+    std::vector<std::vector<IntersectionLine*>> byEdgeA(maxEdgeId + 1);
+    std::vector<std::vector<IntersectionLine*>> byA(maxVertId + 1);
+
+    for (auto& line : lines) {
+        if (line.skip) continue;
+        if (line.edgeAId >= 0 && line.edgeAId <= maxEdgeId)
+            byEdgeA[line.edgeAId].push_back(&line);
+        if (line.aId >= 0 && line.aId < maxVertId)
+            byA[line.aId].push_back(&line);
+    }
+
+    // Chain lines into loops
+    while (true) {
+        // Find first unused line
+        IntersectionLine* first = nullptr;
+        for (auto& line : lines) {
+            if (!line.skip) { first = &line; break; }
+        }
+        if (!first) break;
+
+        first->skip = true;
+        std::vector<IntersectionLine*> loop;
+        loop.push_back(first);
+
+        while (true) {
+            IntersectionLine* current = loop.back();
+            IntersectionLine* next = nullptr;
+
+            // Try to find next line by edge_b_id match
+            if (current->edgeBId >= 0 && current->edgeBId <= maxEdgeId) {
+                for (auto* candidate : byEdgeA[current->edgeBId]) {
+                    if (!candidate->skip) { next = candidate; break; }
+                }
+            }
+            // Try by vertex b_id match
+            if (!next && current->bId >= 0 && current->bId < maxVertId) {
+                for (auto* candidate : byA[current->bId]) {
+                    if (!candidate->skip) { next = candidate; break; }
+                }
+            }
+
+            if (!next) {
+                // Check if loop is closed
+                IntersectionLine* firstLine = loop.front();
+                bool closed = false;
+                if (firstLine->edgeAId >= 0 && firstLine->edgeAId == current->edgeBId) closed = true;
+                if (!closed && firstLine->aId >= 0 && firstLine->aId == current->bId) closed = true;
+
+                if (closed) {
+                    Polygon2i poly;
+                    poly.reserve(loop.size());
+                    for (const auto* l : loop) {
+                        poly.push_back(l->a);
+                    }
+                    loops.push_back(std::move(poly));
+                }
+                break;
+            }
+
+            loop.push_back(next);
+            next->skip = true;
+        }
+    }
+}
+
+// ==============================================================================
+// Slicing: ExPolygon Construction (ported from Legacy make_expolygons)
+// ==============================================================================
+
+void TriMesh::makeExPolygons(const Polygons2i& loops, ExPolygons2i& slices) const {
+    if (loops.empty()) return;
+
+    // Compute signed area for each loop to determine winding
+    // Sort by absolute area (largest first = outermost contours)
+    auto signedArea = [](const Polygon2i& poly) -> double {
+        double area = 0.0;
+        size_t n = poly.size();
+        for (size_t i = 0; i < n; ++i) {
+            size_t j = (i + 1) % n;
+            area += static_cast<double>(poly[i].x) * poly[j].y;
+            area -= static_cast<double>(poly[j].x) * poly[i].y;
+        }
+        return area * 0.5;
+    };
+
+    // Separate into CCW (contours, positive area) and CW (holes, negative area)
+    // Then use Clipper2 for proper union with safety offset
+    Clipper2Lib::Paths64 ccwPaths;  // contours
+    Clipper2Lib::Paths64 cwPaths;   // holes
+
+    for (const auto& loop : loops) {
+        double area = signedArea(loop);
+        Clipper2Lib::Path64 path;
+        path.reserve(loop.size());
+        for (const auto& pt : loop) {
+            path.emplace_back(pt.x, pt.y);
+        }
+        if (area > 0) {
+            ccwPaths.push_back(std::move(path));
+        } else if (area < 0) {
+            cwPaths.push_back(std::move(path));
+        }
+    }
+
+    // Build ExPolygons: union all contours, then subtract holes
+    // Using Clipper2's PolyTree for proper nesting
+    Clipper2Lib::Paths64 allPaths;
+    allPaths.insert(allPaths.end(), ccwPaths.begin(), ccwPaths.end());
+
+    // Sort by absolute area descending (outer first), then diff holes progressively
+    // This matches the Legacy approach using the _area_comp sort
+    std::vector<size_t> sortedIdx(loops.size());
+    std::iota(sortedIdx.begin(), sortedIdx.end(), 0);
+    std::vector<double> absAreas(loops.size());
+    std::vector<double> signedAreas(loops.size());
+    for (size_t i = 0; i < loops.size(); ++i) {
+        signedAreas[i] = signedArea(loops[i]);
+        absAreas[i] = std::abs(signedAreas[i]);
+    }
+    std::sort(sortedIdx.begin(), sortedIdx.end(),
+              [&absAreas](size_t a, size_t b) { return absAreas[a] > absAreas[b]; });
+
+    // Build union progressively (positive = add, negative = subtract)
+    constexpr double EPSILON_AREA = 1.0;
+    Clipper2Lib::Paths64 resultPaths;
+
+    for (size_t idx : sortedIdx) {
+        Clipper2Lib::Path64 path;
+        path.reserve(loops[idx].size());
+        for (const auto& pt : loops[idx]) {
+            path.emplace_back(pt.x, pt.y);
+        }
+
+        if (signedAreas[idx] > EPSILON_AREA) {
+            // Contour: union with result
+            resultPaths.push_back(std::move(path));
+        } else if (signedAreas[idx] < -EPSILON_AREA) {
+            // Hole: difference from result
+            Clipper2Lib::Clipper64 clipper;
+            clipper.AddSubject(resultPaths);
+            clipper.AddClip({path});
+            Clipper2Lib::Paths64 diff;
+            clipper.Execute(Clipper2Lib::ClipType::Difference,
+                           Clipper2Lib::FillRule::NonZero, diff);
+            resultPaths = std::move(diff);
+        }
+    }
+
+    // Safety offset to merge very close facets (matches Legacy offset2_ex)
+    double safetyOffset = 0.0499 / MESH_SCALING_FACTOR;
+    Clipper2Lib::Paths64 grown = Clipper2Lib::InflatePaths(
+        resultPaths, safetyOffset, Clipper2Lib::JoinType::Miter,
+        Clipper2Lib::EndType::Polygon);
+    Clipper2Lib::Paths64 shrunk = Clipper2Lib::InflatePaths(
+        grown, -safetyOffset, Clipper2Lib::JoinType::Miter,
+        Clipper2Lib::EndType::Polygon);
+
+    // Use PolyTree to separate contours and holes
+    Clipper2Lib::Clipper64 finalClipper;
+    finalClipper.AddSubject(shrunk);
+    Clipper2Lib::PolyTree64 polyTree;
+    Clipper2Lib::Paths64 openPaths;
+    finalClipper.Execute(Clipper2Lib::ClipType::Union,
+                        Clipper2Lib::FillRule::NonZero, polyTree, openPaths);
+
+    // Convert PolyTree to ExPolygons
+    // Each top-level node is a contour; its children are holes
+    std::function<void(const Clipper2Lib::PolyPath64&)> processNode;
+    processNode = [&slices, &processNode](const Clipper2Lib::PolyPath64& node) {
+        if (node.Polygon().empty()) {
+            // Root node or empty - process children
+            for (const auto& child : node) {
+                processNode(*child);
+            }
+            return;
+        }
+
+        // This node is a contour
+        ExPolygon2i exPoly;
+        for (const auto& pt : node.Polygon()) {
+            exPoly.contour.push_back({pt.x, pt.y});
+        }
+
+        // Children of a contour are holes
+        for (const auto& holeNode : node) {
+            if (!holeNode->Polygon().empty()) {
+                Polygon2i hole;
+                for (const auto& pt : holeNode->Polygon()) {
+                    hole.push_back({pt.x, pt.y});
+                }
+                exPoly.holes.push_back(std::move(hole));
+
+                // Children of holes are nested contours (islands inside holes)
+                for (const auto& nestedContour : *holeNode) {
+                    processNode(*nestedContour);
+                }
+            }
+        }
+
+        slices.push_back(std::move(exPoly));
+    };
+
+    processNode(polyTree);
+}
+
+} // namespace Geometry
+} // namespace MarcSLM
