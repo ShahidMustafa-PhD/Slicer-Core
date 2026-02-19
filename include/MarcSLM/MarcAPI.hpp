@@ -33,13 +33,19 @@ constexpr MarcErrorCode MARC_E_NOTIMPL = 0x80004001;
 ///          slicing, and export operations. The primary entry point for
 ///          external applications.
 ///
-///          Usage:
+///          Usage (single model, legacy path):
 ///          1. Construct with bed dimensions
 ///          2. setModels() with file paths and transforms
 ///          3. set_config_json() with build configuration
 ///          4. exportSlmFile() to run the full pipeline
 ///
-///          Ported from Legacy Marc::MarcAPI.
+///          Usage (multi-model build plate, ported from Legacy Print):
+///          1. Construct with bed dimensions
+///          2. setModels() with multiple InternalModel descriptors
+///          3. set_config_json() with build configuration
+///          4. exportSlmFileBuildPlate() for full build plate pipeline
+///
+///          Ported from Legacy Marc::MarcAPI + Slic3r::Print.
 class MarcAPI {
 public:
     using PathList         = std::vector<std::filesystem::path>;
@@ -87,11 +93,24 @@ public:
     // Pipeline Execution
     // =========================================================================
 
-    /// @brief Run the full pipeline: load ? slice ? hatch ? classify ? export.
+    /// @brief Run the full single-model pipeline: load ? slice ? hatch ? classify ? export.
     MarcErrorCode exportSlmFile();
+
+    /// @brief Run the full build plate pipeline for all models.
+    /// @details Uses BuildPlate to handle multi-model placement, slicing,
+    ///          surface detection, anchors, and support material.
+    MarcErrorCode exportSlmFileBuildPlate();
 
     /// @brief Arrange models on the build plate.
     MarcErrorCode arrangeBuildPlate();
+
+    // =========================================================================
+    // Build Plate Access
+    // =========================================================================
+
+    /// @brief Get the internal build plate (for advanced usage).
+    [[nodiscard]] BuildPlate& getBuildPlate();
+    [[nodiscard]] const BuildPlate& getBuildPlate() const;
 
     // =========================================================================
     // Progress Callback
