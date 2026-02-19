@@ -9,8 +9,10 @@
 
 #include "MarcSLM/Core/SlmConfig.hpp"
 #include "MarcSLM/Core/BuildStyleManager.hpp"
+#include "MarcSLM/Core/BuildPlate.hpp"
 #include "MarcSLM/Core/MarcFormat.hpp"
 #include "MarcSLM/Core/MarcFile.hpp"
+#include "MarcSLM/Core/InternalModel.hpp"
 #include "MarcSLM/Geometry/MeshProcessor.hpp"
 #include "MarcSLM/Thermal/ScanSegmentClassifier.hpp"
 #include "MarcSLM/Thermal/ThermalSegmentTypes.hpp"
@@ -36,7 +38,12 @@ namespace MarcSLM {
 ///          5. exportMarc()    ? Binary .marc file
 ///          6. exportSVG()     ? SVG visualisation per layer
 ///
-///          Ported from Legacy Marc::SlmPrint + Marc::MarcAPI.
+///          Also supports multi-model build plate preparation via BuildPlate:
+///          1. addModelToBuildPlate()  ? Add models with placement
+///          2. processBuildPlate()     ? Full build preparation pipeline
+///          3. exportBuildPlateLayers() ? Extract processed layers
+///
+///          Ported from Legacy Marc::SlmPrint + Marc::MarcAPI + Slic3r::Print.
 class SlmPrint {
 public:
     /// @brief Progress callback: (message, percent 0-100).
@@ -70,7 +77,7 @@ public:
     }
 
     // =========================================================================
-    // Model Loading
+    // Model Loading (Single-Mesh Legacy Path)
     // =========================================================================
 
     /// @brief Load a 3D mesh from file.
@@ -82,7 +89,35 @@ public:
     [[nodiscard]] bool hasMesh() const noexcept;
 
     // =========================================================================
-    // Slicing Pipeline
+    // Build Plate Management (Multi-Model Path, ported from Legacy Print)
+    // =========================================================================
+
+    /// @brief Get the build plate for direct manipulation.
+    [[nodiscard]] BuildPlate& buildPlate() noexcept { return buildPlate_; }
+    [[nodiscard]] const BuildPlate& buildPlate() const noexcept { return buildPlate_; }
+
+    /// @brief Add a model to the build plate.
+    /// @param model InternalModel with path, position, orientation.
+    /// @return Pointer to the created PrintObject, or nullptr on failure.
+    PrintObject* addModelToBuildPlate(const InternalModel& model);
+
+    /// @brief Add multiple models to the build plate.
+    /// @param models Vector of InternalModel descriptors.
+    /// @return Number of models successfully added.
+    size_t addModelsToBuildPlate(const std::vector<InternalModel>& models);
+
+    /// @brief Run the full build plate preparation pipeline.
+    /// @details Executes: slice ? anchors ? surface detection ? infill ?
+    ///          support material for all objects on the build plate.
+    /// @return true on success.
+    bool processBuildPlate();
+
+    /// @brief Export processed build plate layers as Marc::Layer format.
+    /// @return Vector of Marc::Layer from the build plate pipeline.
+    [[nodiscard]] std::vector<Marc::Layer> exportBuildPlateLayers() const;
+
+    // =========================================================================
+    // Slicing Pipeline (Single-Mesh Legacy Path)
     // =========================================================================
 
     /// @brief Perform uniform slicing using config layer_thickness.
@@ -141,6 +176,11 @@ public:
     /// @return true on success.
     bool processAndExport(const std::string& outputDir);
 
+    /// @brief Execute the full build plate pipeline and export.
+    /// @param outputDir Output directory for all files.
+    /// @return true on success.
+    bool processAndExportBuildPlate(const std::string& outputDir);
+
     // =========================================================================
     // Progress Callback
     // =========================================================================
@@ -151,6 +191,7 @@ private:
     SlmConfig                        config_;
     BuildStyleManager                buildStyles_;
     Geometry::MeshProcessor          meshProcessor_;
+    BuildPlate                       buildPlate_;
     std::vector<Marc::Layer>         layers_;
     ProgressCallback                 progressCb_;
 
