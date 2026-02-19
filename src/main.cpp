@@ -94,7 +94,7 @@ static void printVersion() {
         << MarcSLM::Config::PROJECT_NAME << " v"
         << MarcSLM::Config::PROJECT_VERSION << "\n"
         << MarcSLM::Config::PROJECT_DESCRIPTION << "\n"
-        << "C++17 | MSVC x64 | Manifold + Clipper2 + Assimp\n"
+        << "C++17 | MSVC x64 | TriMesh + Clipper2 + Assimp\n"
         << std::endl;
 }
 
