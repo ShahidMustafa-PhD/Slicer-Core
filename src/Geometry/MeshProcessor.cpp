@@ -21,8 +21,7 @@ namespace Geometry {
 // Mesh Loading and Validation
 // ==============================================================================
 
-std::unique_ptr<manifold::Manifold>
-MeshProcessor::loadMesh(const std::string& filePath) {
+void MeshProcessor::loadMesh(const std::string& filePath) {
     // Create Assimp importer with robust processing flags
     Assimp::Importer importer;
 
@@ -121,8 +120,6 @@ MeshProcessor::loadMesh(const std::string& filePath) {
 
     // Store the mesh
     mesh_ = std::move(manifoldPtr);
-
-    return std::unique_ptr<manifold::Manifold>(mesh_.get());
 }
 
 manifold::Box MeshProcessor::getBoundingBox() const {
@@ -218,9 +215,8 @@ LayerStack MeshProcessor::sliceUniform(float layerThickness) {
         throw SlicingError("Mesh has zero or negative height");
     }
 
-    // Prepare result vector
-    LayerStack layers;
-    layers.reserve(numLayers);
+    // Prepare result vector with correct SIZE (not just capacity)
+    LayerStack layers(numLayers);
 
     // Parallel slicing using Intel TBB
     // Each iteration processes one layer independently
@@ -307,8 +303,8 @@ LayerStack MeshProcessor::sliceAtHeights(const std::vector<float>& zHeights) {
         return {};
     }
 
-    LayerStack layers;
-    layers.reserve(zHeights.size());
+    // Prepare result vector with correct SIZE (not just capacity)
+    LayerStack layers(zHeights.size());
 
     // Parallel slicing for multiple heights
     tbb::parallel_for(size_t{0}, zHeights.size(), [&](size_t i) {
