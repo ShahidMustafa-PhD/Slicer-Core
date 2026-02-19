@@ -83,7 +83,6 @@ find_package(assimp CONFIG REQUIRED)
 find_package(Clipper2 CONFIG REQUIRED)
 find_package(TBB CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
-find_package(manifold CONFIG REQUIRED)
 
 # Workaround for TBB debug library not found on Windows
 # Use release TBB library and import library for debug builds if debug variants are not available
@@ -177,10 +176,12 @@ set(MARCSLM_CORE_HEADERS
 
 set(MARCSLM_GEOMETRY_HEADERS
     include/MarcSLM/Geometry/MeshProcessor.hpp
+    include/MarcSLM/Geometry/TriMesh.hpp
 )
 
 set(MARCSLM_GEOMETRY_SOURCES
     src/Geometry/MeshProcessor.cpp
+    src/Geometry/TriMesh.cpp
 )
 
 set(MARCSLM_IO_HEADERS
@@ -336,9 +337,6 @@ target_link_libraries(MarcSLM_Core
         
         # 2D topology engine
         Clipper2::Clipper2
-        
-        # 3D manifold processing
-        manifold::manifold
         
     PRIVATE
         # Model I/O
