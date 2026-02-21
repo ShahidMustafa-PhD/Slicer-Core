@@ -152,6 +152,38 @@ public:
                          const uint32_t* indices, size_t numFaces);
 
     // =========================================================================
+    // Geometric Transforms (ported from Legacy TriangleMesh)
+    // =========================================================================
+
+    /// @brief Translate all vertices by (dx, dy, dz) in mm.
+    void translate(float dx, float dy, float dz);
+
+    /// @brief Uniform scale around the origin.
+    void scale(float factor);
+
+    /// @brief Per-axis scale around the origin.
+    void scale(float sx, float sy, float sz);
+
+    /// @brief Rotate around the X axis (roll) by angle in radians.
+    void rotateX(float angleRad);
+
+    /// @brief Rotate around the Y axis (pitch) by angle in radians.
+    void rotateY(float angleRad);
+
+    /// @brief Rotate around the Z axis (yaw) by angle in radians.
+    void rotateZ(float angleRad);
+
+    /// @brief Translate so that the bounding-box minimum Z is 0 (sit on ground).
+    void alignToGround();
+
+    /// @brief Translate so that the XY center of the bounding box is at (cx, cy).
+    void centerXY(float cx, float cy);
+
+    /// @brief Merge another mesh into this one (append all facets).
+    /// @details After merge, topology is invalidated and repair() must be called again.
+    void merge(const TriMesh& other);
+
+    // =========================================================================
     // Repair
     // =========================================================================
 
