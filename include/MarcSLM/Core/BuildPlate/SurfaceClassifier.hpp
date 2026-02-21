@@ -10,47 +10,27 @@
 
 #include "MarcSLM/Core/BuildPlate/BuildTypes.hpp"
 
+#include <vector>
+
 namespace MarcSLM {
-namespace BuildPlate {
+namespace BP {
 
-// ==============================================================================
-// SurfaceClassifier
-// ==============================================================================
-
-/// @brief Classifies per-region slice surfaces on a single BuildLayer.
+/// @brief Classifies per-region slice surfaces as Top / Bottom / Internal.
 ///
-/// @details Ported and isolated from the legacy `BuildLayer::detectSurfaceTypes`.
-///          For every surface in every region:
+/// @details Ported and isolated from legacy BuildLayer::detectSurfaceTypes.
+///   - Top:      part of the surface not covered by the upper layer.
+///   - Bottom:   part not supported by the lower layer (if not already Top).
+///   - Internal: everything else.
 ///
-///   - **Top**:    Any portion not covered by the upper-layer polygons.
-///   - **Bottom**: Any portion not covered (supported) by the lower-layer
-///                 polygons, provided it was not already classified as Top.
-///   - **Internal**: Everything else.
-///
-///   The classification uses Clipper2 boolean difference operations, which
-///   are the same operations performed in the original legacy code.
-///
-/// ### Thread Safety
-///   Stateless: `classify()` operates only on data passed as arguments and
-///   is therefore fully re-entrant.  The caller must ensure no concurrent
-///   writes to the layer being classified.
+/// Thread safety: stateless — classify() is fully re-entrant.
 class SurfaceClassifier {
 public:
-    // =========================================================================
-    // Construction
-    // =========================================================================
-
     SurfaceClassifier() = default;
     ~SurfaceClassifier() = default;
-
     SurfaceClassifier(const SurfaceClassifier&)            = default;
     SurfaceClassifier& operator=(const SurfaceClassifier&) = default;
     SurfaceClassifier(SurfaceClassifier&&) noexcept        = default;
     SurfaceClassifier& operator=(SurfaceClassifier&&) noexcept = default;
-
-    // =========================================================================
-    // Primary Interface
-    // =========================================================================
 
     /// @brief Classify all surfaces in all regions of a single layer.
     ///
@@ -59,27 +39,22 @@ public:
     ///               but never modified.
     void classify(BuildLayer& layer) const;
 
-    /// @brief Classify surfaces for every layer in a container.
+    /// @brief Classify every layer in the supplied stack. Nulls are skipped.
     ///
     /// @param layers  Random-access span of raw layer pointers.
     ///                Null pointers are silently skipped.
     void classifyAll(const std::vector<BuildLayer*>& layers) const;
 
 private:
-    // =========================================================================
-    // Implementation Helpers
-    // =========================================================================
-
-    /// @brief Collect all valid contours from all regions of @p layer into
-    ///        a flat Paths64.  Returns an empty Paths64 if layer is null.
+    /// @brief Collect all valid contours from every region of @p layer.
     [[nodiscard]] static Clipper2Lib::Paths64 collectContours(
         const BuildLayer* layer);
 
-    /// @brief Classify surfaces in a single BuildLayerRegion.
+    /// @brief Classify one BuildLayerRegion using pre-collected neighbour paths.
     static void classifyRegion(BuildLayerRegion&             region,
                                 const Clipper2Lib::Paths64&   upperPaths,
                                 const Clipper2Lib::Paths64&   lowerPaths);
 };
 
-} // namespace BuildPlate
+} // namespace BP
 } // namespace MarcSLM
