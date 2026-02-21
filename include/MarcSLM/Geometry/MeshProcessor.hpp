@@ -122,6 +122,29 @@ public:
     [[nodiscard]] std::tuple<size_t, size_t, double> getMeshStats() const;
 
     // =========================================================================
+    // Geometric Transforms (for build plate placement)
+    // =========================================================================
+
+    /// @brief Apply Euler-angle orientation (roll/pitch/yaw) and XYZ placement.
+    /// @details Applies rotations in intrinsic ZYX order (yaw ? pitch ? roll),
+    ///          then aligns to ground (Z=0), then translates to (x, y, z).
+    ///          This matches the SLM build plate convention where models are
+    ///          oriented first, then positioned on the plate.
+    /// @throws MeshProcessingError if no mesh is loaded
+    void applyPlacement(double x, double y, double z,
+                        double roll, double pitch, double yaw);
+
+    /// @brief Merge another processor's mesh into this one.
+    /// @details After merge, the internal mesh contains geometry from both.
+    ///          Topology is invalidated and will be re-repaired on next slice.
+    /// @throws MeshProcessingError if either mesh is invalid
+    void mergeMesh(const MeshProcessor& other);
+
+    /// @brief Create a deep copy of the internal mesh.
+    /// @return A new MeshProcessor owning a copy of the mesh.
+    [[nodiscard]] std::unique_ptr<MeshProcessor> clone() const;
+
+    // =========================================================================
     // Slicing Algorithms
     // =========================================================================
 
