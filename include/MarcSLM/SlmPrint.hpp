@@ -43,7 +43,7 @@ namespace MarcSLM {
 ///          2. processBuildPlate()     ? Full build preparation pipeline
 ///          3. exportBuildPlateLayers() ? Extract processed layers
 ///
-///          Ported from Legacy Marc::SlmPrint + Marc::MarcAPI + Slic3r::Print.
+///        
 class SlmPrint {
 public:
     /// @brief Progress callback: (message, percent 0-100).
