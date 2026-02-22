@@ -173,6 +173,15 @@ set(MARCSLM_CORE_HEADERS
     include/MarcSLM/Core/SVGExporter.hpp
     include/MarcSLM/Core/Logger.hpp
     include/MarcSLM/Core/ErrorState.hpp
+    # BuildPlate sub-modules
+    include/MarcSLM/Core/BuildPlate/BuildTypes.hpp
+    include/MarcSLM/Core/BuildPlate/LayerHeightGenerator.hpp
+    include/MarcSLM/Core/BuildPlate/SurfaceClassifier.hpp
+    include/MarcSLM/Core/BuildPlate/OverhangDetector.hpp
+    include/MarcSLM/Core/BuildPlate/SupportGenerator.hpp
+    include/MarcSLM/Core/BuildPlate/LayerExporter.hpp
+    include/MarcSLM/Core/BuildPlate/ModelPlacement.hpp
+    include/MarcSLM/Core/BuildPlate/BuildPlatePreparator.hpp
 )
 
 set(MARCSLM_GEOMETRY_HEADERS
@@ -225,6 +234,15 @@ set(MARCSLM_SOURCES
     src/Core/BuildPlate.cpp
     src/Core/MarcFile.cpp
     src/Core/SVGExporter.cpp
+    # BuildPlate sub-module implementations
+    src/Core/BuildPlate/BuildTypes.cpp
+    src/Core/BuildPlate/LayerHeightGenerator.cpp
+    src/Core/BuildPlate/SurfaceClassifier.cpp
+    src/Core/BuildPlate/OverhangDetector.cpp
+    src/Core/BuildPlate/SupportGenerator.cpp
+    src/Core/BuildPlate/LayerExporter.cpp
+    src/Core/BuildPlate/ModelPlacement.cpp
+    src/Core/BuildPlate/BuildPlatePreparator.cpp
     
     # Geometry implementations
     ${MARCSLM_GEOMETRY_SOURCES}
@@ -290,7 +308,8 @@ target_compile_features(io_example PRIVATE cxx_std_17)
 # Post-build step: Copy MarcSLM_CLI and dependencies to bin and install/bin after build
 # ==============================================================================
 if(MSVC)
-    set(POST_BUILD_INSTALL_DIR "${CMAKE_BINARY_DIR}/install/bin")
+    #set(POST_BUILD_INSTALL_DIR "${CMAKE_BINARY_DIR}/install/bin")
+    set(POST_BUILD_INSTALL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/install")
     set(POST_BUILD_BIN_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
     add_custom_command(TARGET MarcSLM_CLI POST_BUILD
         # Copy all DLLs to bin directory (runtime output dir)
