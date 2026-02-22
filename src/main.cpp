@@ -7,12 +7,18 @@
 // Usage:
 //   MarcSLM_CLI --config config.json model1.stl [model2.stl ...]
 //   MarcSLM_CLI -c config.json model1.3mf model2.obj
+//   MarcSLM_CLI --buildplate -c config.json model1.stl model2.stl
 //
 // Options:
-//   --config, -c <path>   Path to JSON configuration file (required)
-//   --output, -o <dir>    Output directory for SVG layers (default: ./output)
-//   --help,   -h          Print usage information
-//   --version, -v         Print version information
+//   --config, -c <path>     Path to JSON configuration file (required)
+//   --output, -o <dir>      Output directory for SVG layers (default: ./output)
+//   --buildplate, -b        Process all models as a unified build plate
+//   --spacing <mm>          Minimum gap between parts in mm (default: 5)
+//   --help,   -h            Print usage information
+//   --version, -v           Print version information
+//
+// Note: bedWidth and bedDepth are read from config.json ("bedWidth", "bedDepth").
+//       They are NOT accepted as CLI arguments.
 //
 // Output:
 //   <output>/SvgLayers/          Raw geometry SVG per layer
@@ -41,11 +47,15 @@ namespace fs = std::filesystem;
 // ==============================================================================
 
 struct CliArgs {
-    std::string              configPath;     ///< Path to JSON config file
-    std::string              outputDir;      ///< Output directory (default: ./output)
-    std::vector<std::string> modelPaths;     ///< Paths to 3D model files
-    bool                     showHelp   = false;
+    std::string              configPath;
+    std::string              outputDir;
+    std::vector<std::string> modelPaths;
+    bool                     showHelp    = false;
     bool                     showVersion = false;
+    bool                     buildPlate  = false;
+    float                    spacing     = 5.0f;  ///< Minimum gap between parts [mm]
+    // bedWidth and bedDepth are intentionally absent:
+    // they come from config.json ("bedWidth" / "bedDepth").
 };
 
 static void printUsage(const char* programName) {
@@ -64,28 +74,27 @@ static void printUsage(const char* programName) {
         << "\n"
         << "Options:\n"
         << "  --output, -o <dir>    Output directory (default: ./output)\n"
+        << "  --buildplate, -b      Process all models as a unified build plate\n"
+        << "  --spacing <mm>        Minimum gap between parts (default: 5 mm)\n"
         << "  --help,   -h          Show this help message\n"
         << "  --version, -v         Show version information\n"
         << "\n"
+        << "Build Plate Dimensions:\n"
+        << "  bedWidth and bedDepth are read from the JSON config file.\n"
+        << "  Add these keys to your config.json:\n"
+        << "    \"bedWidth\": 120.0,\n"
+        << "    \"bedDepth\": 120.0\n"
+        << "\n"
         << "Output Files:\n"
         << "  <output>/SvgLayers/          Raw geometry SVG per layer\n"
-        << "  <output>/SvgLayers_slm/      Thermal-classified SVG per layer (22 BuildStyle regions)\n"
+        << "  <output>/SvgLayers_slm/      Thermal-classified SVG per layer\n"
         << "  <output>/slicefile.marc      Binary .marc export\n"
         << "\n"
-        << "Thermal Region Classification (22 BuildStyleID types):\n"
-        << "  Volume:    CoreContour, CoreHatch, Shell1Contour, Shell1Hatch,\n"
-        << "             Shell2Contour, Shell2Hatch\n"
-        << "  UpSkin:    CoreContour, CoreHatch, Shell1Contour, Shell1Hatch\n"
-        << "  DownSkin:  CoreContourOverhang, CoreHatchOverhang,\n"
-        << "             Shell1ContourOverhang, Shell1HatchOverhang\n"
-        << "  Hollow:    HollowShell1Contour, HollowShell1ContourHatch,\n"
-        << "             HollowShell1ContourHatchOverhang,\n"
-        << "             HollowShell2Contour, HollowShell2ContourHatch,\n"
-        << "             HollowShell2ContourHatchOverhang\n"
-        << "  Support:   SupportStructure, SupportContour\n"
+        << "Example (single model):\n"
+        << "  " << programName << " -c config.json -o output part_A.stl\n"
         << "\n"
-        << "Example:\n"
-        << "  " << programName << " -c config.json -o output part_A.stl part_B.stl\n"
+        << "Example (build plate with multiple models):\n"
+        << "  " << programName << " -b -c config.json -o output part_A.stl part_B.stl\n"
         << std::endl;
 }
 
@@ -99,7 +108,7 @@ static void printVersion() {
 }
 
 static bool parseArgs(int argc, char* argv[], CliArgs& args) {
-    args.outputDir = "output";  // default
+    args.outputDir = "output";
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -120,14 +129,27 @@ static bool parseArgs(int argc, char* argv[], CliArgs& args) {
             args.outputDir = argv[++i];
             continue;
         }
+        if (arg == "--buildplate" || arg == "-b") {
+            args.buildPlate = true;
+            continue;
+        }
+        if (arg == "--spacing" && i + 1 < argc) {
+            args.spacing = std::stof(argv[++i]);
+            continue;
+        }
 
-        // Treat unknown flags as errors
+        // Reject removed bed-size CLI options with a helpful message
+        if (arg == "--bed-width" || arg == "--bed-depth") {
+            std::cerr << "Error: '" << arg << "' is no longer a CLI option.\n"
+                      << "  Set \"bedWidth\" and \"bedDepth\" in your config.json instead.\n";
+            return false;
+        }
+
         if (arg.size() > 1 && arg[0] == '-') {
             std::cerr << "Error: Unknown option '" << arg << "'\n";
             return false;
         }
 
-        // Positional argument ? model file path
         args.modelPaths.push_back(arg);
     }
 
@@ -155,6 +177,10 @@ static bool validateArgs(const CliArgs& args) {
             return false;
         }
     }
+    if (args.buildPlate && args.modelPaths.size() < 2) {
+        std::cerr << "Warning: --buildplate with a single model is valid but "
+                     "equivalent to the default single-model mode.\n";
+    }
     return true;
 }
 
@@ -171,15 +197,14 @@ static void progressCallback(const char* message, int percent) {
 // ==============================================================================
 
 static bool processModel(const std::string& modelPath,
-                          const MarcSLM::SlmConfig& config,
-                          const std::string& outputDir,
-                          int modelIndex) {
+                         const MarcSLM::SlmConfig& config,
+                         const std::string& outputDir,
+                         int modelIndex) {
     std::cout << "\n========================================\n";
     std::cout << "Processing model " << (modelIndex + 1)
               << ": " << fs::path(modelPath).filename().string() << "\n";
     std::cout << "========================================\n";
 
-    // Build per-model output directory
     std::string modelName = fs::path(modelPath).stem().string();
     fs::path modelOutputDir = fs::path(outputDir) / modelName;
 
@@ -190,20 +215,20 @@ static bool processModel(const std::string& modelPath,
         return false;
     }
 
-    // Create the SlmPrint engine for this model
     MarcSLM::SlmPrint engine;
     engine.setSlmConfig(config);
+    // Apply bed size from config to the build plate used for SVG sizing
+    engine.buildPlate().setBedSize(
+        static_cast<float>(config.bedWidth),
+        static_cast<float>(config.bedDepth));
     engine.setProgressCallback(progressCallback);
 
-    // Step 1: Load mesh
     std::cout << "\n--- Step 1: Loading mesh ---\n";
     if (!engine.loadMesh(modelPath)) {
         std::cerr << "Error: Failed to load mesh from " << modelPath << "\n";
         return false;
     }
-    std::cout << "Mesh loaded successfully.\n";
 
-    // Step 2: Slice
     std::cout << "\n--- Step 2: Slicing ---\n";
     if (config.adaptive_slicing) {
         float minH = static_cast<float>(config.layer_thickness * 0.5);
@@ -218,67 +243,170 @@ static bool processModel(const std::string& modelPath,
             return false;
         }
     }
-    std::cout << "Slicing complete: " << engine.layerCount() << " layers generated.\n";
+    std::cout << "Slicing complete: " << engine.layerCount() << " layers.\n";
 
     if (engine.layerCount() == 0) {
         std::cerr << "Warning: No layers generated for " << modelPath << "\n";
-        return true;  // Not a fatal error
+        return true;
     }
 
-    // Step 3: Generate scan paths (perimeters + hatches)
     std::cout << "\n--- Step 3: Generating scan paths ---\n";
     if (!engine.generatePaths()) {
         std::cerr << "Error: Path generation failed.\n";
         return false;
     }
-    std::cout << "Scan paths generated successfully.\n";
 
-    // Step 4: Thermal region classification (22 BuildStyleID types)
     std::cout << "\n--- Step 4: Thermal region classification ---\n";
     auto classifiedLayers = engine.classify();
-    std::cout << "Classified " << classifiedLayers.size()
-              << " layers into thermal regions.\n";
+    std::cout << "Classified " << classifiedLayers.size() << " layers.\n";
 
-    // Print classification summary
-    {
-        size_t totalHatchSegments = 0;
-        size_t totalPolylineSegments = 0;
-        for (const auto& cl : classifiedLayers) {
-            totalHatchSegments += cl.segmentHatches.size();
-            totalPolylineSegments += cl.segmentPolylines.size();
-        }
-        std::cout << "  Hatch segments:    " << totalHatchSegments << "\n";
-        std::cout << "  Polyline segments: " << totalPolylineSegments << "\n";
-    }
-
-    // Step 5: Export .marc binary file
     std::cout << "\n--- Step 5: Exporting .marc binary ---\n";
     fs::path marcPath = modelOutputDir / "slicefile.marc";
     if (!engine.exportMarc(marcPath.string())) {
         std::cerr << "Error: .marc export failed.\n";
         return false;
     }
-    std::cout << "Exported: " << marcPath.string() << "\n";
 
-    // Step 6: Export raw geometry SVG layers
     std::cout << "\n--- Step 6: Exporting raw SVG layers ---\n";
     if (!engine.exportSVG(modelOutputDir.string())) {
         std::cerr << "Error: SVG export failed.\n";
         return false;
     }
-    std::cout << "SVG layers written to: "
-              << (modelOutputDir / "SvgLayers").string() << "\n";
 
-    // Step 7: Export thermal-classified SVG layers (22 BuildStyleID colour coding)
     std::cout << "\n--- Step 7: Exporting thermal-classified SVG layers ---\n";
     if (!engine.exportSegmentSVG(modelOutputDir.string())) {
         std::cerr << "Error: Segment SVG export failed.\n";
         return false;
     }
-    std::cout << "Thermal SVG layers written to: "
-              << (modelOutputDir / "SvgLayers_slm").string() << "\n";
 
     std::cout << "\nModel '" << modelName << "' processed successfully.\n";
+    return true;
+}
+
+// ==============================================================================
+// Pipeline: Process all models as a unified build plate
+// ==============================================================================
+
+static bool processBuildPlate(const std::vector<std::string>& modelPaths,
+                               const MarcSLM::SlmConfig& config,
+                               const std::string& outputDir,
+                               float spacing) {
+    // Bed dimensions come exclusively from config
+    const float bedWidth = static_cast<float>(config.bedWidth);
+    const float bedDepth = static_cast<float>(config.bedDepth);
+
+    std::cout << "\n================================================================\n";
+    std::cout << "  Build Plate Mode: " << modelPaths.size() << " models\n";
+    std::cout << "  Bed size (from config): " << bedWidth << " x " << bedDepth << " mm\n";
+    std::cout << "  Minimum spacing: " << spacing << " mm\n";
+    std::cout << "================================================================\n\n";
+
+    std::vector<MarcSLM::InternalModel> models;
+    models.reserve(modelPaths.size());
+
+    for (std::size_t i = 0; i < modelPaths.size(); ++i) {
+        MarcSLM::InternalModel im;
+        im.path        = modelPaths[i];
+        im.buildconfig = "";
+        im.number      = static_cast<int>(i);
+        im.xpos = im.ypos = im.zpos = 0.0;
+        im.roll = im.pitch = im.yaw = 0.0;
+        models.push_back(im);
+        std::cout << "  Model " << i << ": "
+                  << fs::path(modelPaths[i]).filename().string() << "\n";
+    }
+
+    MarcSLM::SlmPrint engine;
+    engine.setSlmConfig(config);
+    engine.setProgressCallback(progressCallback);
+
+    // Apply bed size from config
+    auto& plate = engine.buildPlate();
+    plate.setBedSize(bedWidth, bedDepth);
+
+    std::cout << "\n--- Step 1: Loading models onto build plate ---\n";
+    std::size_t added = engine.addModelsToBuildPlate(models);
+    if (added == 0) {
+        std::cerr << "Error: Failed to add any models to the build plate.\n";
+        return false;
+    }
+    std::cout << "Added " << added << " of " << models.size() << " models.\n";
+
+    std::cout << "\n--- Step 2: Preparing build plate ---\n";
+    try {
+        plate.prepareBuildPlate();
+    } catch (const std::exception& e) {
+        std::cerr << "Error: Build plate preparation failed: " << e.what() << "\n";
+        return false;
+    }
+
+    std::cout << "\n  Model Placement Summary:\n";
+    for (std::size_t i = 0; i < plate.objectCount(); ++i) {
+        const auto* obj = plate.getObject(i);
+        if (!obj) continue;
+        std::cout << "    Model " << i << ": pos=("
+                  << obj->placement.x << ", " << obj->placement.y << ", "
+                  << obj->placement.z << ") size=("
+                  << obj->sizeX << " x " << obj->sizeY << " x "
+                  << obj->sizeZ << " mm)\n";
+    }
+
+    std::cout << "\n--- Step 3: Processing build plate ---\n";
+    if (!engine.processBuildPlate()) {
+        std::cerr << "Error: Build plate processing failed.\n";
+        return false;
+    }
+    std::cout << "Build plate processing complete: "
+              << engine.layerCount() << " layers.\n";
+
+    if (engine.layerCount() == 0) {
+        std::cerr << "Warning: No layers generated from the build plate.\n";
+        return true;
+    }
+
+    std::cout << "\n--- Step 4: Generating scan paths ---\n";
+    if (!engine.generatePaths()) {
+        std::cerr << "Error: Path generation failed.\n";
+        return false;
+    }
+
+    std::cout << "\n--- Step 5: Thermal region classification ---\n";
+    auto classifiedLayers = engine.classify();
+    std::cout << "Classified " << classifiedLayers.size() << " layers.\n";
+
+    fs::path buildPlateOutputDir = fs::path(outputDir) / "buildplate";
+    try {
+        fs::create_directories(buildPlateOutputDir);
+    } catch (const fs::filesystem_error& e) {
+        std::cerr << "Error: Cannot create output directory: " << e.what() << "\n";
+        return false;
+    }
+
+    std::cout << "\n--- Step 6: Exporting .marc binary ---\n";
+    fs::path marcPath = buildPlateOutputDir / "slicefile.marc";
+    if (!engine.exportMarc(marcPath.string())) {
+        std::cerr << "Error: .marc export failed.\n";
+        return false;
+    }
+
+    std::cout << "\n--- Step 7: Exporting raw SVG layers ---\n";
+    if (!engine.exportSVG(buildPlateOutputDir.string())) {
+        std::cerr << "Error: SVG export failed.\n";
+        return false;
+    }
+
+    std::cout << "\n--- Step 8: Exporting thermal-classified SVG layers ---\n";
+    if (!engine.exportSegmentSVG(buildPlateOutputDir.string())) {
+        std::cerr << "Error: Segment SVG export failed.\n";
+        return false;
+    }
+
+    MarcSLM::MarcFile verifyFile;
+    if (verifyFile.readFromFile(marcPath.string())) {
+        std::cout << "\nVerified .marc file: " << verifyFile.layers.size() << " layers\n";
+    }
+
+    std::cout << "\nBuild plate processed successfully.\n";
     return true;
 }
 
@@ -287,47 +415,29 @@ static bool processModel(const std::string& modelPath,
 // ==============================================================================
 
 int main(int argc, char* argv[]) {
-    // ------------------------------------------------------------------
-    // Parse command-line arguments
-    // ------------------------------------------------------------------
     CliArgs args;
     if (!parseArgs(argc, argv, args)) {
         printUsage(argv[0]);
         return EXIT_FAILURE;
     }
-
-    if (args.showHelp) {
-        printUsage(argv[0]);
-        return EXIT_SUCCESS;
-    }
-    if (args.showVersion) {
-        printVersion();
-        return EXIT_SUCCESS;
-    }
-
+    if (args.showHelp)    { printUsage(argv[0]); return EXIT_SUCCESS; }
+    if (args.showVersion) { printVersion();      return EXIT_SUCCESS; }
     if (!validateArgs(args)) {
         std::cerr << "\nRun with --help for usage information.\n";
         return EXIT_FAILURE;
     }
 
-    // ------------------------------------------------------------------
-    // Print banner
-    // ------------------------------------------------------------------
     std::cout
         << "================================================================\n"
         << "  " << MarcSLM::Config::PROJECT_NAME
         << " v" << MarcSLM::Config::PROJECT_VERSION << "\n"
         << "  " << MarcSLM::Config::PROJECT_DESCRIPTION << "\n"
-        << "================================================================\n"
-        << "\n";
+        << "================================================================\n\n";
 
-    // ------------------------------------------------------------------
-    // Start logger
-    // ------------------------------------------------------------------
     MarcSLM::Logger::instance().start();
 
     // ------------------------------------------------------------------
-    // Load JSON configuration
+    // Load JSON configuration — bedWidth / bedDepth come from here
     // ------------------------------------------------------------------
     std::cout << "Loading configuration: " << args.configPath << "\n";
     MarcSLM::SlmConfig config;
@@ -337,25 +447,23 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    // Print key configuration values
-    std::cout << "\nConfiguration Summary:\n";
-    std::cout << "  Beam diameter:       " << config.beam_diameter << " mm\n";
-    std::cout << "  Layer thickness:     " << config.layer_thickness << " mm\n";
-    std::cout << "  First layer:         " << config.first_layer_thickness << " mm\n";
-    std::cout << "  Hatch spacing:       " << config.hatch_spacing << " mm\n";
-    std::cout << "  Hatch angle:         " << config.hatch_angle << " deg\n";
-    std::cout << "  Island size:         " << config.island_width << " x "
-              << config.island_height << " mm\n";
-    std::cout << "  Perimeters:          " << config.perimeters << "\n";
-    std::cout << "  Threads:             " << config.threads << "\n";
-    std::cout << "  Adaptive slicing:    " << (config.adaptive_slicing ? "ON" : "OFF") << "\n";
-    std::cout << "  Support material:    " << (config.support_material ? "ON" : "OFF") << "\n";
-    std::cout << "  Overhangs angle:     " << config.overhangs_angle << " deg\n";
-    std::cout << "  Fill density:        " << config.fill_density << "%\n";
+    std::cout << "\nConfiguration Summary:\n"
+              << "  Beam diameter:       " << config.beam_diameter       << " mm\n"
+              << "  Layer thickness:     " << config.layer_thickness      << " mm\n"
+              << "  First layer:         " << config.first_layer_thickness<< " mm\n"
+              << "  Hatch spacing:       " << config.hatch_spacing        << " mm\n"
+              << "  Hatch angle:         " << config.hatch_angle          << " deg\n"
+              << "  Island size:         " << config.island_width  << " x "
+                                           << config.island_height << " mm\n"
+              << "  Perimeters:          " << config.perimeters           << "\n"
+              << "  Threads:             " << config.threads              << "\n"
+              << "  Adaptive slicing:    " << (config.adaptive_slicing ? "ON" : "OFF") << "\n"
+              << "  Support material:    " << (config.support_material   ? "ON" : "OFF") << "\n"
+              << "  Fill density:        " << config.fill_density         << "%\n"
+              // Task 2: log bed dimensions read from config
+              << "  Bed width  (config): " << config.bedWidth             << " mm\n"
+              << "  Bed depth  (config): " << config.bedDepth             << " mm\n";
 
-    // ------------------------------------------------------------------
-    // Create output directory
-    // ------------------------------------------------------------------
     try {
         fs::create_directories(args.outputDir);
     } catch (const fs::filesystem_error& e) {
@@ -365,44 +473,44 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    std::cout << "\nOutput directory: " << fs::absolute(args.outputDir).string() << "\n";
-    std::cout << "Model files:     " << args.modelPaths.size() << "\n";
+    std::cout << "\nOutput directory: " << fs::absolute(args.outputDir).string() << "\n"
+              << "Model files:     " << args.modelPaths.size() << "\n"
+              << "Mode:            " << (args.buildPlate ? "Build Plate" : "Individual") << "\n";
 
-    // ------------------------------------------------------------------
-    // Process each model through the full SLM pipeline
-    // ------------------------------------------------------------------
     int successCount = 0;
-    int failCount = 0;
+    int failCount    = 0;
 
-    for (size_t i = 0; i < args.modelPaths.size(); ++i) {
-        if (processModel(args.modelPaths[i], config, args.outputDir,
-                         static_cast<int>(i))) {
-            ++successCount;
+    if (args.buildPlate) {
+        // Build plate mode — bed size driven entirely by config
+        if (processBuildPlate(args.modelPaths, config, args.outputDir, args.spacing)) {
+            successCount = static_cast<int>(args.modelPaths.size());
         } else {
-            ++failCount;
-            std::cerr << "Warning: Model " << args.modelPaths[i]
-                      << " failed processing.\n";
+            failCount    = static_cast<int>(args.modelPaths.size());
+        }
+    } else {
+        for (size_t i = 0; i < args.modelPaths.size(); ++i) {
+            if (processModel(args.modelPaths[i], config, args.outputDir,
+                             static_cast<int>(i))) {
+                ++successCount;
+            } else {
+                ++failCount;
+                std::cerr << "Warning: Model " << args.modelPaths[i]
+                          << " failed processing.\n";
+            }
         }
     }
 
-    // ------------------------------------------------------------------
-    // Summary
-    // ------------------------------------------------------------------
-    std::cout << "\n================================================================\n";
-    std::cout << "  Pipeline Complete\n";
-    std::cout << "================================================================\n";
-    std::cout << "  Models processed: " << successCount << " / "
-              << args.modelPaths.size() << "\n";
-    if (failCount > 0) {
+    std::cout << "\n================================================================\n"
+              << "  Pipeline Complete\n"
+              << "================================================================\n"
+              << "  Mode:             " << (args.buildPlate ? "Build Plate" : "Individual") << "\n"
+              << "  Models processed: " << successCount << " / "
+                                        << args.modelPaths.size()  << "\n";
+    if (failCount > 0)
         std::cout << "  Models failed:    " << failCount << "\n";
-    }
-    std::cout << "  Output directory: " << fs::absolute(args.outputDir).string() << "\n";
-    std::cout << "================================================================\n";
+    std::cout << "  Output directory: " << fs::absolute(args.outputDir).string() << "\n"
+              << "================================================================\n";
 
-    // ------------------------------------------------------------------
-    // Shutdown
-    // ------------------------------------------------------------------
     MarcSLM::Logger::instance().stop();
-
     return (failCount == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
