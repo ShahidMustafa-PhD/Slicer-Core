@@ -137,6 +137,56 @@ std::tuple<size_t, size_t, double> MeshProcessor::getMeshStats() const {
 }
 
 // ==============================================================================
+// Geometric Transforms (for build plate placement)
+// ==============================================================================
+
+void MeshProcessor::applyPlacement(double x, double y, double z,
+                                    double roll, double pitch, double yaw) {
+    if (!hasValidMesh()) {
+        throw MeshProcessingError("No valid mesh loaded for placement transform");
+    }
+
+    // Apply rotations in intrinsic ZYX order: yaw (Z) → pitch (Y) → roll (X)
+    if (std::abs(yaw) > 1e-9)
+        mesh_->rotateZ(static_cast<float>(yaw));
+    if (std::abs(pitch) > 1e-9)
+        mesh_->rotateY(static_cast<float>(pitch));
+    if (std::abs(roll) > 1e-9)
+        mesh_->rotateX(static_cast<float>(roll));
+
+    // Align to ground (Z=0) after rotation so the model sits on the plate
+    mesh_->alignToGround();
+
+    // Translate to the specified position
+    mesh_->translate(static_cast<float>(x),
+                     static_cast<float>(y),
+                     static_cast<float>(z));
+
+    // Invalidate cached bounding box
+    bbox_ = mesh_->bbox();
+}
+
+void MeshProcessor::mergeMesh(const MeshProcessor& other) {
+    if (!hasValidMesh()) {
+        throw MeshProcessingError("Cannot merge: this mesh is invalid");
+    }
+    if (!other.hasValidMesh()) {
+        throw MeshProcessingError("Cannot merge: other mesh is invalid");
+    }
+    mesh_->merge(*other.mesh_);
+    bbox_.reset();
+}
+
+std::unique_ptr<MeshProcessor> MeshProcessor::clone() const {
+    auto copy = std::make_unique<MeshProcessor>();
+    if (mesh_) {
+        copy->mesh_ = std::make_unique<TriMesh>(*mesh_);
+        copy->bbox_ = bbox_;
+    }
+    return copy;
+}
+
+// ==============================================================================
 // Slicing: Uniform
 // ==============================================================================
 
