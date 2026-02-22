@@ -1,8 +1,18 @@
 // ==============================================================================
-// MarcSLM - Build Plate Preparation Implementation
+// MarcSLM - Build Plate Orchestrator — Implementation
 // ==============================================================================
-// Ported from Legacy Slic3r Print.cpp + PrintObject.cpp
-// Industrial-quality build plate management for SLM process
+// This file contains ONLY orchestration logic:
+//   - State management & pipeline sequencing
+//   - Object/region lifecycle (add, delete, clear)
+//   - Delegation to specialist service classes
+//
+// No algorithm code lives here.  Algorithm implementations are in:
+//   src/Core/BuildPlate/BuildTypes.cpp          — BuildLayer / BuildLayerRegion
+//   src/Core/BuildPlate/LayerHeightGenerator.cpp
+//   src/Core/BuildPlate/SurfaceClassifier.cpp
+//   src/Core/BuildPlate/OverhangDetector.cpp
+//   src/Core/BuildPlate/SupportGenerator.cpp
+//   src/Core/BuildPlate/LayerExporter.cpp
 // ==============================================================================
 
 #include "MarcSLM/Core/BuildPlate.hpp"
@@ -11,21 +21,12 @@
 #include <cassert>
 #include <cmath>
 #include <iostream>
-#include <limits>
-#include <numeric>
-#include <queue>
-#include <sstream>
 #include <stdexcept>
-#include <thread>
-
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
 
 namespace MarcSLM {
 
 // ==============================================================================
-// StepState explicit template instantiations
+// StepState explicit instantiations
 // ==============================================================================
 
 template class StepState<BuildStep>;
@@ -35,161 +36,28 @@ template class StepState<ObjectStep>;
 // PrintRegion
 // ==============================================================================
 
-PrintRegion::PrintRegion(BuildPlate* plate) : plate_(plate) {}
+PrintRegion::PrintRegion(BuildPlate* plate) noexcept
+    : plate_(plate)
+{}
 
 // ==============================================================================
-// BuildLayerRegion
+// PrintObject — Construction / Destruction
 // ==============================================================================
 
-BuildLayerRegion::BuildLayerRegion(BuildLayer* layer, PrintRegion* region)
-    : layer_(layer), region_(region) {}
-
-void BuildLayerRegion::prepareFillSurfaces() {
-    // Copy slices to fill surfaces if fill surfaces are empty.
-    // In the SLM process, all internal regions are treated as solid fill.
-    if (fillSurfaces.empty() && !slices.empty()) {
-        fillSurfaces = slices;
-    }
-}
-
-// ==============================================================================
-// BuildLayer
-// ==============================================================================
-
-BuildLayer::BuildLayer(size_t id, PrintObject* object,
-                       double height, double printZ, double sliceZ)
-    : id_(id), object_(object), height_(height),
-      printZ_(printZ), sliceZ_(sliceZ) {}
-
-BuildLayer::~BuildLayer() {
-    for (auto* r : regions_) {
-        delete r;
-    }
-    regions_.clear();
-}
-
-BuildLayerRegion* BuildLayer::addRegion(PrintRegion* region) {
-    auto* lr = new BuildLayerRegion(this, region);
-    regions_.push_back(lr);
-    return lr;
-}
-
-BuildLayerRegion* BuildLayer::getRegion(size_t idx) {
-    return (idx < regions_.size()) ? regions_[idx] : nullptr;
-}
-
-const BuildLayerRegion* BuildLayer::getRegion(size_t idx) const {
-    return (idx < regions_.size()) ? regions_[idx] : nullptr;
-}
-
-void BuildLayer::detectSurfaceTypes() {
-    for (auto* layerRegion : regions_) {
-        if (layerRegion->slices.empty()) continue;
-
-        // Get upper and lower layer slices for comparison
-        Clipper2Lib::Paths64 upperPaths;
-        Clipper2Lib::Paths64 lowerPaths;
-
-        if (upperLayer) {
-            for (const auto* ulr : upperLayer->regions()) {
-                for (const auto& surf : ulr->slices) {
-                    if (surf.isValid()) {
-                        upperPaths.push_back(surf.contour);
-                    }
-                }
-            }
-        }
-        if (lowerLayer) {
-            for (const auto* llr : lowerLayer->regions()) {
-                for (const auto& surf : llr->slices) {
-                    if (surf.isValid()) {
-                        lowerPaths.push_back(surf.contour);
-                    }
-                }
-            }
-        }
-
-        // Classify each surface
-        for (auto& surf : layerRegion->slices) {
-            if (!surf.isValid()) continue;
-
-            Clipper2Lib::Paths64 currentPath = {surf.contour};
-
-            // Check if this surface is exposed on top (no upper layer covering it)
-            if (upperPaths.empty()) {
-                surf.type = SurfaceType::Top;
-            } else {
-                Clipper2Lib::Paths64 uncoveredTop =
-                    Clipper2Lib::BooleanOp(Clipper2Lib::ClipType::Difference,
-                        Clipper2Lib::FillRule::NonZero,
-                        currentPath, upperPaths);
-                if (!uncoveredTop.empty()) {
-                    // Part of this surface is exposed on top
-                    surf.type = SurfaceType::Top;
-                }
-            }
-
-            // Check if this surface is exposed on bottom (no lower layer supporting it)
-            if (lowerPaths.empty()) {
-                surf.type = SurfaceType::Bottom;
-            } else {
-                Clipper2Lib::Paths64 unsupportedBottom =
-                    Clipper2Lib::BooleanOp(Clipper2Lib::ClipType::Difference,
-                        Clipper2Lib::FillRule::NonZero,
-                        currentPath, lowerPaths);
-                if (!unsupportedBottom.empty() && surf.type != SurfaceType::Top) {
-                    surf.type = SurfaceType::Bottom;
-                }
-            }
-
-            // If neither top nor bottom, it's internal
-            if (surf.type != SurfaceType::Top && surf.type != SurfaceType::Bottom) {
-                surf.type = SurfaceType::Internal;
-            }
-        }
-    }
-}
-
-void BuildLayer::makeSlices() {
-    mergedSlices.clear();
-
-    Clipper2Lib::Paths64 allPaths;
-    for (const auto* lr : regions_) {
-        for (const auto& surf : lr->slices) {
-            if (surf.isValid()) {
-                allPaths.push_back(surf.contour);
-            }
-        }
-    }
-
-    if (allPaths.empty()) return;
-
-    // Union all region slices
-    Clipper2Lib::Clipper64 clipper;
-    clipper.AddSubject(allPaths);
-    clipper.Execute(Clipper2Lib::ClipType::Union,
-                    Clipper2Lib::FillRule::NonZero,
-                    mergedSlices);
-}
-
-// ==============================================================================
-// PrintObject: Construction
-// ==============================================================================
-
-PrintObject::PrintObject(BuildPlate* plate, const InternalModel& modelDesc,
-                         Geometry::MeshProcessor& meshProcessor)
+PrintObject::PrintObject(BuildPlate*              plate,
+                          const InternalModel&     modelDesc,
+                          Geometry::MeshProcessor& meshProcessor)
     : plate_(plate)
     , meshProcessor_(&meshProcessor)
-    , modelDesc_(modelDesc) {
-    // Set placement from model descriptor
-    placement.x = modelDesc.xpos;
-    placement.y = modelDesc.ypos;
-    placement.z = modelDesc.zpos;
-    placement.roll = modelDesc.roll;
+    , modelDesc_(modelDesc)
+{
+    placement.x     = modelDesc.xpos;
+    placement.y     = modelDesc.ypos;
+    placement.z     = modelDesc.zpos;
+    placement.roll  = modelDesc.roll;
     placement.pitch = modelDesc.pitch;
-    placement.yaw = modelDesc.yaw;
+    placement.yaw   = modelDesc.yaw;
 
-    // Get bounding box from loaded mesh
     if (meshProcessor_->hasValidMesh()) {
         bbox_ = meshProcessor_->getBoundingBox();
         sizeX = static_cast<double>(bbox_.sizeX());
@@ -198,184 +66,124 @@ PrintObject::PrintObject(BuildPlate* plate, const InternalModel& modelDesc,
     }
 }
 
-PrintObject::~PrintObject() {
+PrintObject::~PrintObject()
+{
     clearLayers();
     clearSupportLayers();
 }
 
-BuildLayer* PrintObject::getLayer(size_t idx) {
+// ==============================================================================
+// PrintObject — Layer Management
+// ==============================================================================
+
+BuildLayer* PrintObject::getLayer(std::size_t idx) noexcept
+{
     return (idx < layers_.size()) ? layers_[idx] : nullptr;
 }
 
-const BuildLayer* PrintObject::getLayer(size_t idx) const {
+const BuildLayer* PrintObject::getLayer(std::size_t idx) const noexcept
+{
     return (idx < layers_.size()) ? layers_[idx] : nullptr;
 }
 
-BuildLayer* PrintObject::addLayer(size_t id, double height,
-                                  double printZ, double sliceZ) {
+BuildLayer* PrintObject::addLayer(std::size_t id, double height,
+                                   double printZ, double sliceZ)
+{
     auto* layer = new BuildLayer(id, this, height, printZ, sliceZ);
     layers_.push_back(layer);
     return layer;
 }
 
-void PrintObject::deleteLayer(size_t idx) {
+void PrintObject::deleteLayer(std::size_t idx)
+{
     if (idx >= layers_.size()) return;
     delete layers_[idx];
-    layers_.erase(layers_.begin() + static_cast<ptrdiff_t>(idx));
+    layers_.erase(layers_.begin() + static_cast<std::ptrdiff_t>(idx));
 }
 
-void PrintObject::clearLayers() {
+void PrintObject::clearLayers()
+{
     for (auto* l : layers_) delete l;
     layers_.clear();
 }
 
-void PrintObject::clearSupportLayers() {
+void PrintObject::clearSupportLayers()
+{
     for (auto* l : supportLayers_) delete l;
     supportLayers_.clear();
 }
 
 // ==============================================================================
-// PrintObject: Layer Height Generation
-// (Ported from Legacy PrintObject::generate_object_layers)
+// PrintObject — Pipeline: Slicing (per-object, legacy path)
 // ==============================================================================
 
-std::vector<double> PrintObject::generateObjectLayers(double firstLayerHeight) {
-    std::vector<double> result;
-
-    double layerHeight = config.layer_thickness;
-
-    // Enforce SLM layer height constraints
-    if (config.z_steps_per_mm > 0) {
-        double minDz = 1.0 / config.z_steps_per_mm;
-        layerHeight = std::round(layerHeight / minDz) * minDz;
-        if (layerHeight <= 0.0) layerHeight = config.layer_thickness;
-    }
-
-    // Respect first layer height
-    if (firstLayerHeight > 0.0) {
-        result.push_back(firstLayerHeight);
-    }
-
-    double printZ = firstLayerHeight;
-
-    // Generate uniform layers (SLM always uses uniform layer height)
-    while ((printZ + 1e-6) < sizeZ) {
-        printZ += layerHeight;
-        result.push_back(printZ);
-    }
-
-    // Adjust last layer to match object height precisely
-    if (result.size() > 1 && config.z_steps_per_mm > 0) {
-        double diff = result.back() - sizeZ;
-        size_t lastIdx = result.size() - 1;
-        double newH = result[lastIdx] - result[lastIdx - 1];
-
-        if (diff < 0) {
-            // Need to thicken last layer
-            newH = std::min(layerHeight * 1.5, newH - diff);
-        } else {
-            // Need to thin last layer
-            newH = std::max(layerHeight * 0.5, newH - diff);
-        }
-        result[lastIdx] = result[lastIdx - 1] + newH;
-    }
-
-    // Apply z-gradation if configured
-    if (config.z_steps_per_mm > 0) {
-        double gradation = 1.0 / config.z_steps_per_mm;
-        double lastZ = 0.0;
-        for (auto& z : result) {
-            double h = z - lastZ;
-            double remainder = std::fmod(h, gradation);
-            if (remainder > gradation / 2.0) {
-                h += (gradation - remainder);
-            } else {
-                h -= remainder;
-            }
-            z = lastZ + h;
-            lastZ = z;
-        }
-    }
-
-    return result;
-}
-
-// ==============================================================================
-// PrintObject: Slicing
-// (Ported from Legacy PrintObject::_slice)
-// ==============================================================================
-
-void PrintObject::slice() {
+void PrintObject::slice()
+{
     if (state.isDone(ObjectStep::Slicing)) return;
     state.setStarted(ObjectStep::Slicing);
 
-    std::cout << "  PrintObject: Slicing..." << std::endl;
+    std::cout << "  PrintObject: Slicing '" << modelDesc_.path << "' …\n";
 
     sliceInternal();
 
-    // Remove empty layers from bottom
+    // Drop empty layers from the bottom
     while (!layers_.empty()) {
+        const auto* first = layers_.front();
         bool hasContent = false;
-        for (size_t ri = 0; ri < layers_[0]->regionCount(); ++ri) {
-            if (layers_[0]->getRegion(ri) &&
-                !layers_[0]->getRegion(ri)->slices.empty()) {
-                hasContent = true;
-                break;
-            }
+        for (std::size_t ri = 0; ri < first->regionCount(); ++ri) {
+            const auto* r = first->getRegion(ri);
+            if (r && !r->slices.empty()) { hasContent = true; break; }
         }
         if (hasContent) break;
         deleteLayer(0);
-        for (size_t i = 0; i < layers_.size(); ++i) {
+        for (std::size_t i = 0; i < layers_.size(); i++)
             layers_[i]->setId(i);
-        }
     }
 
-    // Remove empty layers from top
+    // Drop empty layers from the top
     while (!layers_.empty()) {
-        const auto* lastLayer = layers_.back();
+        const auto* last = layers_.back();
         bool hasContent = false;
-        for (size_t ri = 0; ri < lastLayer->regionCount(); ++ri) {
-            if (lastLayer->getRegion(ri) &&
-                !lastLayer->getRegion(ri)->slices.empty()) {
-                hasContent = true;
-                break;
-            }
+        for (std::size_t ri = 0; ri < last->regionCount(); ++ri) {
+            const auto* r = last->getRegion(ri);
+            if (r && !r->slices.empty()) { hasContent = true; break; }
         }
         if (hasContent) break;
         deleteLayer(layers_.size() - 1);
     }
 
     if (layers_.empty()) {
-        std::cerr << "  PrintObject: No layers generated after slicing!" << std::endl;
+        std::cerr << "  PrintObject: No layers generated after slicing!\n";
     } else {
         std::cout << "  PrintObject: " << layers_.size()
-                  << " layers after slicing" << std::endl;
+                  << " layers generated.\n";
     }
 
     state.setDone(ObjectStep::Slicing);
 }
 
-void PrintObject::sliceInternal() {
-    double firstLayerHeight = config.first_layer_thickness;
-    double raftHeight = 0.0;
+void PrintObject::sliceInternal()
+{
+    // --- Layer height sequence -------------------------------------------------
+    const std::vector<double> zHeights = layerGen_.generate(
+        config, sizeZ, config.first_layer_thickness);
 
-    // Generate layer heights
-    std::vector<double> objectLayers = generateObjectLayers(firstLayerHeight);
-
-    // Build slice Z-heights
-    std::vector<float> sliceZs;
     clearLayers();
-    sliceZs.reserve(objectLayers.size());
+    if (zHeights.empty()) return;
 
-    BuildLayer* prev = nullptr;
-    double lo = raftHeight;
-    double hi = lo;
-    size_t id = 0;
+    // --- Build layer objects and Z-list for the slicer -------------------------
+    std::vector<float> sliceZs;
+    sliceZs.reserve(zHeights.size());
 
-    for (size_t i = 0; i < objectLayers.size(); ++i) {
+    BuildLayer* prev  = nullptr;
+    double      lo    = 0.0;
+    double      hi    = 0.0;
+    std::size_t id    = 0;
+
+    for (const double zTop : zHeights) {
         lo = hi;
-        hi = objectLayers[i] + raftHeight;
-        double sliceZ = 0.5 * (lo + hi) - raftHeight;
+        hi = zTop;
+        const double sliceZ = 0.5 * (lo + hi);
 
         auto* layer = addLayer(id++, hi - lo, hi, sliceZ);
         sliceZs.push_back(static_cast<float>(sliceZ));
@@ -385,51 +193,45 @@ void PrintObject::sliceInternal() {
             layer->lowerLayer = prev;
         }
 
-        // Add regions to layer
-        for (size_t ri = 0; ri < plate_->regionCount(); ++ri) {
+        // Attach regions
+        for (std::size_t ri = 0; ri < plate_->regionCount(); ++ri) {
             layer->addRegion(plate_->getRegion(ri));
         }
 
         prev = layer;
     }
 
-    // Perform the actual mesh slicing
+    // --- Mesh slicing ----------------------------------------------------------
     if (!meshProcessor_->hasValidMesh()) {
-        std::cerr << "  PrintObject: No valid mesh for slicing!" << std::endl;
+        std::cerr << "  PrintObject: No valid mesh — skipping slice.\n";
         return;
     }
 
-    // Slice all Z-heights at once using TriMesh slicer
-    auto exPolygonsByLayer = meshProcessor_->mesh_->slice(sliceZs);
+    const auto exPolygonsByLayer = meshProcessor_->mesh_->slice(sliceZs);
 
-    // Distribute ExPolygons to layer regions
-    for (size_t layerIdx = 0; layerIdx < exPolygonsByLayer.size(); ++layerIdx) {
-        if (layerIdx >= layers_.size()) break;
-
-        auto* layer = layers_[layerIdx];
+    // --- Distribute results to layer regions -----------------------------------
+    for (std::size_t li = 0;
+         li < exPolygonsByLayer.size() && li < layers_.size();
+         ++li)
+    {
+        auto* layer = layers_[li];
         if (layer->regionCount() == 0) continue;
 
         auto* regionLayer = layer->getRegion(0);
         if (!regionLayer) continue;
 
-        const auto& exPolygons = exPolygonsByLayer[layerIdx];
-        for (const auto& exPoly : exPolygons) {
+        for (const auto& exPoly : exPolygonsByLayer[li]) {
             ClassifiedSurface surf;
-
-            // Convert contour from TriMesh integer coordinates to Clipper2 coordinates
             surf.contour.reserve(exPoly.contour.size());
-            for (const auto& pt : exPoly.contour) {
-                surf.contour.emplace_back(pt.x, pt.y);
-            }
 
-            // Convert holes
+            for (const auto& pt : exPoly.contour)
+                surf.contour.emplace_back(pt.x, pt.y);
+
             for (const auto& hole : exPoly.holes) {
-                Clipper2Lib::Path64 holePath;
-                holePath.reserve(hole.size());
-                for (const auto& pt : hole) {
-                    holePath.emplace_back(pt.x, pt.y);
-                }
-                surf.holes.push_back(std::move(holePath));
+                Clipper2Lib::Path64 hp;
+                hp.reserve(hole.size());
+                for (const auto& pt : hole) hp.emplace_back(pt.x, pt.y);
+                surf.holes.push_back(std::move(hp));
             }
 
             surf.type = SurfaceType::Internal;
@@ -437,134 +239,112 @@ void PrintObject::sliceInternal() {
         }
     }
 
-    // Make merged slices for each layer
+    // --- Merge per-layer slices ------------------------------------------------
     for (auto* layer : layers_) {
         layer->makeSlices();
     }
 }
 
 std::vector<Geometry::ExPolygons2i> PrintObject::sliceRegion(
-    size_t /*regionId*/, const std::vector<float>& zHeights) {
+    std::size_t /*regionId*/, const std::vector<float>& zHeights)
+{
     if (!meshProcessor_->hasValidMesh()) return {};
     return meshProcessor_->mesh_->slice(zHeights);
 }
 
 // ==============================================================================
-// PrintObject: Anchor Layers
-// (Ported from Legacy PrintObject::add_anchor_layers)
+// PrintObject — Pipeline: Anchor Layers
 // ==============================================================================
 
-void PrintObject::addAnchorLayers() {
+void PrintObject::addAnchorLayers()
+{
     if (state.isDone(ObjectStep::Anchors)) return;
     state.setStarted(ObjectStep::Anchors);
 
-    double anchorThickness = config.anchors_layer_thickness;
-    double totalAnchorHeight = config.anchors;
-    double firstLayerHeight = config.first_layer_thickness;
+    const double anchorThickness = config.anchors_layer_thickness;
+    const double totalAnchorH    = config.anchors;
 
-    if (totalAnchorHeight <= 0.0) {
+    if (totalAnchorH <= 0.0) {
         state.setDone(ObjectStep::Anchors);
         return;
     }
 
-    int numAnchorLayers = static_cast<int>(totalAnchorHeight / anchorThickness);
-    if (numAnchorLayers <= 0) numAnchorLayers = 1;
+    const int numAnchorLayers =
+        std::max(1, static_cast<int>(totalAnchorH / anchorThickness));
 
-    std::cout << "  PrintObject: Adding " << numAnchorLayers
-              << " anchor layers" << std::endl;
+    std::cout << "  PrintObject: Inserting " << numAnchorLayers
+              << " anchor layers.\n";
 
-    // Save original layers
-    std::vector<BuildLayer*> originalLayers;
-    originalLayers.reserve(layers_.size());
-    for (auto* l : layers_) {
-        originalLayers.push_back(l);
-    }
-    layers_.clear();
-    layers_.reserve(static_cast<size_t>(numAnchorLayers) + originalLayers.size());
+    // Stash existing layers, then rebuild with anchors prepended
+    std::vector<BuildLayer*> original;
+    original.reserve(layers_.size());
+    original.swap(layers_);
 
-    // Create anchor layers
-    BuildLayer* prevLayer = nullptr;
-    double currentHeight = 0.0;
+    layers_.reserve(static_cast<std::size_t>(numAnchorLayers) + original.size());
+
+    BuildLayer* prev       = nullptr;
+    double      currentZ   = 0.0;
 
     for (int i = 0; i < numAnchorLayers; ++i) {
-        double layerH = (i == 0) ? firstLayerHeight : anchorThickness;
-        currentHeight += layerH;
+        const double h = (i == 0) ? config.first_layer_thickness : anchorThickness;
+        currentZ += h;
+        auto* anchor = addLayer(static_cast<std::size_t>(i), h, currentZ, 0.0);
 
-        auto* anchorLayer = addLayer(
-            static_cast<size_t>(i), layerH, currentHeight, 0.0);
+        if (prev) { prev->upperLayer = anchor; anchor->lowerLayer = prev; }
 
-        if (prevLayer) {
-            prevLayer->upperLayer = anchorLayer;
-            anchorLayer->lowerLayer = prevLayer;
-        }
+        for (std::size_t ri = 0; ri < plate_->regionCount(); ++ri)
+            anchor->addRegion(plate_->getRegion(ri));
 
-        // Add regions to anchor layer
-        for (size_t ri = 0; ri < plate_->regionCount(); ++ri) {
-            anchorLayer->addRegion(plate_->getRegion(ri));
-        }
-
-        prevLayer = anchorLayer;
+        prev = anchor;
     }
 
-    // Re-attach original layers with offset Z
-    double anchorZOffset = currentHeight;
-    for (size_t i = 0; i < originalLayers.size(); ++i) {
-        auto* layer = originalLayers[i];
-        layer->setId(static_cast<size_t>(numAnchorLayers) + i);
-        layer->setPrintZ(layer->printZ() + anchorZOffset);
+    // Re-attach original layers with Z offset
+    const double zOffset = currentZ;
+    for (std::size_t i = 0; i < original.size(); ++i) {
+        auto* layer = original[i];
+        layer->setId(static_cast<std::size_t>(numAnchorLayers) + i);
+        layer->setPrintZ(layer->printZ() + zOffset);
         layers_.push_back(layer);
 
-        if (prevLayer) {
-            prevLayer->upperLayer = layer;
-            layer->lowerLayer = prevLayer;
-        }
-        prevLayer = layer;
+        if (prev) { prev->upperLayer = layer; layer->lowerLayer = prev; }
+        prev = layer;
     }
 
-    if (!layers_.empty()) {
-        layers_.back()->upperLayer = nullptr;
-    }
+    if (!layers_.empty()) layers_.back()->upperLayer = nullptr;
 
     state.setDone(ObjectStep::Anchors);
 }
 
 // ==============================================================================
-// PrintObject: Surface Detection
+// PrintObject — Pipeline: Surface Detection  (delegates to SurfaceClassifier)
 // ==============================================================================
 
-void PrintObject::detectSurfaceTypes() {
+void PrintObject::detectSurfaceTypes()
+{
     if (state.isDone(ObjectStep::SurfaceDetection)) return;
     state.setStarted(ObjectStep::SurfaceDetection);
 
-    for (auto* layer : layers_) {
-        layer->detectSurfaceTypes();
-    }
+    surfaceClassifier_.classifyAll(layers_);
 
     state.setDone(ObjectStep::SurfaceDetection);
 }
 
 // ==============================================================================
-// PrintObject: Infill Preparation
+// PrintObject — Pipeline: Infill Preparation
 // ==============================================================================
 
-void PrintObject::prepareInfill() {
+void PrintObject::prepareInfill()
+{
     if (state.isDone(ObjectStep::InfillPrep)) return;
     state.setStarted(ObjectStep::InfillPrep);
 
-    // Prerequisite: slicing and surface detection must be done
-    if (!state.isDone(ObjectStep::Slicing)) {
-        slice();
-    }
-    if (!state.isDone(ObjectStep::SurfaceDetection)) {
-        detectSurfaceTypes();
-    }
+    if (!state.isDone(ObjectStep::Slicing))         slice();
+    if (!state.isDone(ObjectStep::SurfaceDetection)) detectSurfaceTypes();
 
     for (auto* layer : layers_) {
-        for (size_t ri = 0; ri < layer->regionCount(); ++ri) {
-            auto* layerRegion = layer->getRegion(ri);
-            if (layerRegion) {
-                layerRegion->prepareFillSurfaces();
-            }
+        for (std::size_t ri = 0; ri < layer->regionCount(); ++ri) {
+            auto* lr = layer->getRegion(ri);
+            if (lr) lr->prepareFillSurfaces();
         }
     }
 
@@ -572,15 +352,17 @@ void PrintObject::prepareInfill() {
 }
 
 // ==============================================================================
-// PrintObject: Support Material
-// (Ported from Legacy PrintObject::generate_support_structure)
+// PrintObject — Pipeline: Support Material  (delegates to OverhangDetector
+//                                             and SupportGenerator)
 // ==============================================================================
 
-bool PrintObject::hasSupportMaterial() const {
-    return config.support_material || config.anchors > 0;
+bool PrintObject::hasSupportMaterial() const noexcept
+{
+    return config.support_material || config.anchors > 0.0;
 }
 
-void PrintObject::generateSupportMaterial() {
+void PrintObject::generateSupportMaterial()
+{
     if (state.isDone(ObjectStep::SupportMaterial)) return;
     state.setStarted(ObjectStep::SupportMaterial);
 
@@ -591,663 +373,819 @@ void PrintObject::generateSupportMaterial() {
         return;
     }
 
-    std::cout << "  PrintObject: Generating support material..." << std::endl;
+    std::cout << "  PrintObject: Detecting overhangs …\n";
+    const auto overhangs = overhangDetector_.detect(
+        layers_, config.support_material_angle);
 
-    double supportAngle = config.support_material_angle;
-    double pillarSpacing = config.support_material_pillar_spacing;
-    double pillarSize = config.support_material_pillar_size;
-
-    // Detect overhangs
-    std::map<size_t, std::map<size_t, Clipper2Lib::Paths64>> overhangAreas;
-    detectOverhangs(overhangAreas, supportAngle);
-
-    // Generate pillar positions
-    std::map<size_t, std::vector<Clipper2Lib::Point64>> pillarPositions;
-    generatePillarPositions(overhangAreas, pillarPositions, pillarSpacing);
-
-    // Create support geometry
-    createSupportPillars(pillarPositions, pillarSize);
+    if (!overhangs.empty()) {
+        std::cout << "  PrintObject: Generating support pillars …\n";
+        supportGen_.generate(layers_, overhangs, config);
+    }
 
     state.setDone(ObjectStep::SupportMaterial);
 }
 
-void PrintObject::detectOverhangs(
-    std::map<size_t, std::map<size_t, Clipper2Lib::Paths64>>& overhangAreas,
-    double supportAngle) {
+// ==============================================================================
+// PrintObject — State Invalidation
+// ==============================================================================
 
-    const double tanAngle = std::tan(supportAngle * M_PI / 180.0);
+bool PrintObject::invalidateStep(ObjectStep step)
+{
+    bool inv = state.invalidate(step);
 
-    for (size_t layerIdx = 1; layerIdx < layers_.size(); ++layerIdx) {
-        auto* layer = layers_[layerIdx];
-        auto* lowerLayer = layers_[layerIdx - 1];
-
-        for (size_t ri = 0; ri < layer->regionCount(); ++ri) {
-            auto* layerRegion = layer->getRegion(ri);
-            auto* lowerRegion = lowerLayer->getRegion(ri);
-            if (!layerRegion || !lowerRegion) continue;
-            if (layerRegion->slices.empty()) continue;
-
-            double maxSupportDist = layer->height() / tanAngle;
-            int64_t scaledDist = static_cast<int64_t>(
-                maxSupportDist / Geometry::MESH_SCALING_FACTOR);
-
-            // Get current layer paths
-            Clipper2Lib::Paths64 currentPaths;
-            for (const auto& surf : layerRegion->slices) {
-                if (surf.isValid()) currentPaths.push_back(surf.contour);
-            }
-
-            // Get lower layer paths and expand them
-            Clipper2Lib::Paths64 lowerPaths;
-            for (const auto& surf : lowerRegion->slices) {
-                if (surf.isValid()) lowerPaths.push_back(surf.contour);
-            }
-
-            Clipper2Lib::Paths64 supportedArea =
-                Clipper2Lib::InflatePaths(lowerPaths, static_cast<double>(scaledDist),
-                    Clipper2Lib::JoinType::Miter, Clipper2Lib::EndType::Polygon);
-
-            // Unsupported areas = current - expanded lower
-            Clipper2Lib::Paths64 unsupported =
-                Clipper2Lib::BooleanOp(Clipper2Lib::ClipType::Difference,
-                    Clipper2Lib::FillRule::NonZero,
-                    currentPaths, supportedArea);
-
-            if (!unsupported.empty()) {
-                overhangAreas[ri][layerIdx] = unsupported;
-            }
-        }
-    }
-}
-
-void PrintObject::generatePillarPositions(
-    const std::map<size_t, std::map<size_t, Clipper2Lib::Paths64>>& overhangAreas,
-    std::map<size_t, std::vector<Clipper2Lib::Point64>>& pillarPositions,
-    double pillarSpacing) {
-
-    int64_t scaledSpacing = static_cast<int64_t>(
-        pillarSpacing / Geometry::MESH_SCALING_FACTOR);
-
-    for (const auto& [regionId, layerOverhangs] : overhangAreas) {
-        // Collect all overhang paths for this region
-        Clipper2Lib::Paths64 allOverhangs;
-        for (const auto& [layerId, paths] : layerOverhangs) {
-            allOverhangs.insert(allOverhangs.end(), paths.begin(), paths.end());
-        }
-
-        // Union all overhangs
-        Clipper2Lib::Clipper64 clipper;
-        clipper.AddSubject(allOverhangs);
-        Clipper2Lib::Paths64 unified;
-        clipper.Execute(Clipper2Lib::ClipType::Union,
-                        Clipper2Lib::FillRule::NonZero, unified);
-
-        // Generate grid points within overhang areas
-        std::vector<Clipper2Lib::Point64> regionPillars;
-        for (const auto& path : unified) {
-            // Compute bounding box
-            int64_t minX = std::numeric_limits<int64_t>::max();
-            int64_t maxX = std::numeric_limits<int64_t>::min();
-            int64_t minY = std::numeric_limits<int64_t>::max();
-            int64_t maxY = std::numeric_limits<int64_t>::min();
-            for (const auto& pt : path) {
-                minX = std::min(minX, pt.x);
-                maxX = std::max(maxX, pt.x);
-                minY = std::min(minY, pt.y);
-                maxY = std::max(maxY, pt.y);
-            }
-
-            // Point-in-polygon grid sampling
-            for (int64_t y = minY; y < maxY; y += scaledSpacing) {
-                for (int64_t x = minX; x < maxX; x += scaledSpacing) {
-                    Clipper2Lib::Point64 testPt(x, y);
-                    if (Clipper2Lib::PointInPolygon(testPt, path) !=
-                        Clipper2Lib::PointInPolygonResult::IsOutside) {
-                        regionPillars.push_back(testPt);
-                    }
-                }
-            }
-        }
-
-        if (!regionPillars.empty()) {
-            pillarPositions[regionId] = std::move(regionPillars);
-        }
-    }
-}
-
-void PrintObject::createSupportPillars(
-    const std::map<size_t, std::vector<Clipper2Lib::Point64>>& pillarPositions,
-    double pillarSize) {
-
-    std::map<size_t, std::vector<SupportPillar>> pillarsByRegion;
-
-    for (const auto& [regionId, points] : pillarPositions) {
-        std::vector<SupportPillar> regionPillars;
-
-        for (const auto& pt : points) {
-            SupportPillar pillar;
-            pillar.x = static_cast<double>(pt.x) * Geometry::MESH_SCALING_FACTOR;
-            pillar.y = static_cast<double>(pt.y) * Geometry::MESH_SCALING_FACTOR;
-            pillar.radiusBase = pillarSize / 2.0;
-            pillar.radiusTop = pillar.radiusBase * 0.8;
-            pillar.topLayer = 0;
-            pillar.bottomLayer = 0;
-
-            // Determine pillar extent through layers
-            bool objectHit = false;
-            for (int i = static_cast<int>(layers_.size()) - 1; i >= 0; --i) {
-                if (regionId >= layers_[static_cast<size_t>(i)]->regionCount())
-                    continue;
-
-                auto* layerRegion = layers_[static_cast<size_t>(i)]->getRegion(regionId);
-                if (!layerRegion) continue;
-
-                bool pointInside = false;
-                for (const auto& surf : layerRegion->slices) {
-                    if (Clipper2Lib::PointInPolygon(pt, surf.contour) !=
-                        Clipper2Lib::PointInPolygonResult::IsOutside) {
-                        pointInside = true;
-                        break;
-                    }
-                }
-
-                if (!pointInside) {
-                    if (pillar.topLayer > 0) {
-                        pillar.bottomLayer = static_cast<size_t>(i);
-                    } else if (objectHit) {
-                        pillar.topLayer = static_cast<size_t>(i);
-                    }
-                } else {
-                    if (pillar.topLayer > 0) {
-                        regionPillars.push_back(pillar);
-                        pillar.topLayer = 0;
-                        pillar.bottomLayer = 0;
-                    }
-                    objectHit = true;
-                }
-            }
-
-            if (pillar.topLayer > 0) {
-                regionPillars.push_back(pillar);
-            }
-        }
-
-        if (!regionPillars.empty()) {
-            pillarsByRegion[regionId] = std::move(regionPillars);
-        }
-    }
-
-    generateSupportGeometry(pillarsByRegion, pillarSize);
-}
-
-void PrintObject::generateSupportGeometry(
-    const std::map<size_t, std::vector<SupportPillar>>& pillarsByRegion,
-    double pillarBaseSize) {
-
-    for (size_t layerIdx = 0; layerIdx < layers_.size(); ++layerIdx) {
-        auto* layer = layers_[layerIdx];
-
-        for (const auto& [regionId, pillars] : pillarsByRegion) {
-            if (regionId >= layer->regionCount()) continue;
-
-            auto* layerRegion = layer->getRegion(regionId);
-            if (!layerRegion) continue;
-
-            double baseRadius = pillarBaseSize / 2.0;
-            double topRadius = baseRadius * 0.2;
-
-            for (const auto& pillar : pillars) {
-                if (layerIdx < pillar.bottomLayer || layerIdx > pillar.topLayer)
-                    continue;
-
-                // Calculate tapered radius
-                double heightPos = (pillar.topLayer > pillar.bottomLayer)
-                    ? static_cast<double>(layerIdx - pillar.bottomLayer) /
-                      static_cast<double>(pillar.topLayer - pillar.bottomLayer)
-                    : 0.5;
-
-                double radius;
-                if (heightPos < 0.2) {
-                    radius = baseRadius;
-                } else if (heightPos > 0.8) {
-                    radius = topRadius;
-                } else {
-                    radius = baseRadius - (baseRadius - topRadius) *
-                             ((heightPos - 0.2) / 0.6);
-                }
-
-                // Create circular pillar polygon
-                int64_t scaledRadius = static_cast<int64_t>(
-                    radius / Geometry::MESH_SCALING_FACTOR);
-                int64_t cx = static_cast<int64_t>(
-                    pillar.x / Geometry::MESH_SCALING_FACTOR);
-                int64_t cy = static_cast<int64_t>(
-                    pillar.y / Geometry::MESH_SCALING_FACTOR);
-
-                ClassifiedSurface supportSurf;
-                int sides = std::max(8, static_cast<int>(radius / 0.1) * 2 + 8);
-                supportSurf.contour.reserve(static_cast<size_t>(sides));
-
-                for (int s = 0; s < sides; ++s) {
-                    double angle = 2.0 * M_PI * s / sides;
-                    supportSurf.contour.emplace_back(
-                        cx + static_cast<int64_t>(scaledRadius * std::cos(angle)),
-                        cy + static_cast<int64_t>(scaledRadius * std::sin(angle)));
-                }
-
-                supportSurf.type = SurfaceType::Support;
-                layerRegion->supportSurfaces.push_back(std::move(supportSurf));
-            }
-        }
-    }
-}
-
-bool PrintObject::invalidateStep(ObjectStep step) {
-    bool invalidated = state.invalidate(step);
-
-    // Propagate to dependent steps
     switch (step) {
         case ObjectStep::Slicing:
-            invalidated |= invalidateStep(ObjectStep::SurfaceDetection);
-            invalidated |= invalidateStep(ObjectStep::SupportMaterial);
+            inv |= invalidateStep(ObjectStep::SurfaceDetection);
+            inv |= invalidateStep(ObjectStep::SupportMaterial);
             break;
         case ObjectStep::SurfaceDetection:
-            invalidated |= invalidateStep(ObjectStep::InfillPrep);
+            inv |= invalidateStep(ObjectStep::InfillPrep);
             break;
         case ObjectStep::InfillPrep:
-            invalidated |= invalidateStep(ObjectStep::Infill);
+            inv |= invalidateStep(ObjectStep::Infill);
             break;
         case ObjectStep::LayerGeneration:
-            invalidated |= invalidateStep(ObjectStep::Slicing);
+            inv |= invalidateStep(ObjectStep::Slicing);
             break;
         default:
             break;
     }
-    return invalidated;
+    return inv;
 }
 
-bool PrintObject::invalidateAllSteps() {
+bool PrintObject::invalidateAllSteps()
+{
     return state.invalidateAll();
 }
 
 // ==============================================================================
-// BuildPlate: Construction
+// BuildPlate — Construction / Destruction
 // ==============================================================================
 
-BuildPlate::BuildPlate() = default;
+BuildPlate::BuildPlate()  = default;
 
-BuildPlate::~BuildPlate() {
+BuildPlate::~BuildPlate()
+{
+    clearUnifiedLayers();
     clearObjects();
     clearRegions();
 }
 
 // ==============================================================================
-// BuildPlate: Configuration
+// BuildPlate — Configuration
 // ==============================================================================
 
-void BuildPlate::applyConfig(const SlmConfig& slmConfig) {
+void BuildPlate::applyConfig(const SlmConfig& slmConfig)
+{
     config = slmConfig;
-
-    for (auto* obj : objects_) {
-        obj->config = slmConfig;
-    }
-    for (auto* region : regions_) {
-        region->config = slmConfig;
-    }
-
+    for (auto* obj    : objects_) obj->config    = slmConfig;
+    for (auto* region : regions_) region->config = slmConfig;
     invalidateAllSteps();
 }
 
 // ==============================================================================
-// BuildPlate: Model Management
+// BuildPlate — Model Management
 // ==============================================================================
 
-PrintObject* BuildPlate::addModel(const InternalModel& model) {
+PrintObject* BuildPlate::addModel(const InternalModel& model)
+{
     try {
-        // Create mesh processor for this model
         auto processor = std::make_unique<Geometry::MeshProcessor>();
         processor->loadMesh(model.path);
 
         if (!processor->hasValidMesh()) {
-            std::cerr << "BuildPlate: Failed to load mesh: "
-                      << model.path << std::endl;
+            std::cerr << "BuildPlate: Failed to load mesh: " << model.path << '\n';
             return nullptr;
         }
 
-        // Create print object
         auto* obj = new PrintObject(this, model, *processor);
         obj->config = config;
 
-        // Ensure at least one region exists
-        if (regions_.empty()) {
-            addRegion();
-        }
+        if (regions_.empty()) addRegion();
 
-        // Assign volumes to first region
         obj->regionVolumes[0].push_back(0);
 
         objects_.push_back(obj);
         meshProcessors_.push_back(std::move(processor));
 
+        // Track the placement for build-plate preparation
+        placements_.emplace_back(model);
+        placements_.back().modelId = static_cast<uint32_t>(objects_.size() - 1);
+
         std::cout << "BuildPlate: Added model '" << model.path
-                  << "' (object " << objects_.size() - 1 << ")" << std::endl;
+                  << "' (object " << objects_.size() - 1 << ")\n";
 
-        // Invalidate arrangement
         invalidateStep(BuildStep::Arrangement);
-
+        prepared_ = false;
         return obj;
+
     } catch (const std::exception& e) {
-        std::cerr << "BuildPlate: Error adding model: " << e.what() << std::endl;
+        std::cerr << "BuildPlate: Error adding model: " << e.what() << '\n';
         return nullptr;
     }
 }
 
-size_t BuildPlate::addModels(const std::vector<InternalModel>& models) {
-    size_t count = 0;
+std::size_t BuildPlate::addModels(const std::vector<InternalModel>& models)
+{
+    std::size_t count = 0;
     for (const auto& m : models) {
         if (addModel(m)) ++count;
     }
     return count;
 }
 
-void BuildPlate::clearObjects() {
+void BuildPlate::clearObjects()
+{
     for (auto* obj : objects_) {
         obj->invalidateAllSteps();
         delete obj;
     }
     objects_.clear();
     meshProcessors_.clear();
+    placements_.clear();
+    clearUnifiedLayers();
     clearRegions();
+    prepared_ = false;
 }
 
-void BuildPlate::deleteObject(size_t idx) {
+void BuildPlate::deleteObject(std::size_t idx)
+{
     if (idx >= objects_.size()) return;
     objects_[idx]->invalidateAllSteps();
     delete objects_[idx];
-    objects_.erase(objects_.begin() + static_cast<ptrdiff_t>(idx));
+    objects_.erase(objects_.begin() + static_cast<std::ptrdiff_t>(idx));
 
     if (idx < meshProcessors_.size()) {
-        meshProcessors_.erase(meshProcessors_.begin() +
-                              static_cast<ptrdiff_t>(idx));
+        meshProcessors_.erase(
+            meshProcessors_.begin() + static_cast<std::ptrdiff_t>(idx));
     }
+    if (idx < placements_.size()) {
+        placements_.erase(
+            placements_.begin() + static_cast<std::ptrdiff_t>(idx));
+    }
+    clearUnifiedLayers();   // unified layers reference per-object regions
+    prepared_ = false;
 }
 
-PrintObject* BuildPlate::getObject(size_t idx) {
+PrintObject* BuildPlate::getObject(std::size_t idx) noexcept
+{
     return (idx < objects_.size()) ? objects_[idx] : nullptr;
 }
 
-const PrintObject* BuildPlate::getObject(size_t idx) const {
+const PrintObject* BuildPlate::getObject(std::size_t idx) const noexcept
+{
     return (idx < objects_.size()) ? objects_[idx] : nullptr;
 }
 
 // ==============================================================================
-// BuildPlate: Region Management
+// BuildPlate — Region Management
 // ==============================================================================
 
-PrintRegion* BuildPlate::addRegion() {
-    auto* region = new PrintRegion(this);
-    region->config = config;
-    regions_.push_back(region);
-    return region;
+PrintRegion* BuildPlate::addRegion()
+{
+    auto* r   = new PrintRegion(this);
+    r->config = config;
+    regions_.push_back(r);
+    return r;
 }
 
-PrintRegion* BuildPlate::getRegion(size_t idx) {
+PrintRegion* BuildPlate::getRegion(std::size_t idx) noexcept
+{
     return (idx < regions_.size()) ? regions_[idx] : nullptr;
 }
 
-const PrintRegion* BuildPlate::getRegion(size_t idx) const {
+const PrintRegion* BuildPlate::getRegion(std::size_t idx) const noexcept
+{
     return (idx < regions_.size()) ? regions_[idx] : nullptr;
 }
 
-void BuildPlate::clearRegions() {
+void BuildPlate::clearRegions()
+{
     for (auto* r : regions_) delete r;
     regions_.clear();
 }
 
 // ==============================================================================
-// BuildPlate: Processing Pipeline
-// (Ported from Legacy Print::process)
+// BuildPlate — Unified Layer Stack Lifecycle
 // ==============================================================================
 
-void BuildPlate::process() {
-    reportProgress("Starting build plate processing...", 0);
-
-    // Step 1: Slice all objects
-    reportProgress("Slicing objects...", 10);
-    for (auto* obj : objects_) {
-        obj->slice();
-    }
-
-    // Step 2: Add anchor layers
-    reportProgress("Adding anchor layers...", 30);
-    for (auto* obj : objects_) {
-        obj->addAnchorLayers();
-    }
-
-    // Step 3: Detect surface types
-    reportProgress("Detecting surface types...", 50);
-    for (auto* obj : objects_) {
-        obj->detectSurfaceTypes();
-    }
-
-    // Step 4: Prepare infill
-    reportProgress("Preparing infill...", 70);
-    for (auto* obj : objects_) {
-        obj->prepareInfill();
-    }
-
-    // Step 5: Generate support material
-    reportProgress("Generating support material...", 85);
-    for (auto* obj : objects_) {
-        obj->generateSupportMaterial();
-    }
-
-    reportProgress("Build plate processing complete", 100);
+void BuildPlate::clearUnifiedLayers()
+{
+    for (auto* l : unifiedLayers_) delete l;
+    unifiedLayers_.clear();
 }
 
 // ==============================================================================
-// BuildPlate: Validation
+// BuildPlate — Bed Size  (propagate to preparator immediately)
 // ==============================================================================
 
-void BuildPlate::validate() const {
+void BuildPlate::setBedSize(float width, float depth)
+{
+    bedWidth_ = width;
+    bedDepth_ = depth;
+    preparator_.setBedSize(width, depth);   // keep preparator in sync
+}
+
+// ==============================================================================
+// BuildPlate — Build Plate Preparation
+// ==============================================================================
+
+void BuildPlate::prepareBuildPlate()
+{
     if (objects_.empty()) {
-        throw std::runtime_error("BuildPlate: No objects to process");
+        throw std::runtime_error("BuildPlate: No objects to prepare.");
     }
 
-    if (config.layer_thickness <= 0.0) {
-        throw std::runtime_error("BuildPlate: Invalid layer thickness");
+    reportProgress("Preparing build plate …", 0);
+
+    preparator_.setBedSize(bedWidth_, bedDepth_);
+    preparator_.setMinSpacing(config.duplicate_distance);
+    preparator_.setProgressCallback(progressCb_);
+
+    preparator_.prepare(placements_, meshProcessors_);
+
+    // Sync PrintObject state from (possibly updated) placements and meshes
+    for (std::size_t i = 0; i < objects_.size(); ++i) {
+        auto* obj  = objects_[i];
+        auto& proc = meshProcessors_[i];
+        auto& pl   = placements_[i];
+
+        obj->placement.x     = pl.x;
+        obj->placement.y     = pl.y;
+        obj->placement.z     = pl.z;
+        obj->placement.roll  = pl.roll;
+        obj->placement.pitch = pl.pitch;
+        obj->placement.yaw   = pl.yaw;
+
+        if (proc && proc->hasValidMesh()) {
+            const auto bb = proc->getBoundingBox();
+            obj->sizeX = static_cast<double>(bb.sizeX());
+            obj->sizeY = static_cast<double>(bb.sizeY());
+            obj->sizeZ = static_cast<double>(bb.sizeZ());
+        }
     }
 
-    if (config.hatch_spacing <= 0.0) {
-        throw std::runtime_error("BuildPlate: Invalid hatch spacing");
+    // Ensure we have exactly one region per object for per-model identity
+    if (regions_.empty()) addRegion();
+    while (regions_.size() < objects_.size()) addRegion();
+
+    // Assign each object to its own region
+    for (std::size_t i = 0; i < objects_.size(); ++i) {
+        objects_[i]->regionVolumes.clear();
+        objects_[i]->regionVolumes[i].push_back(0);
     }
+
+    prepared_ = true;
+    state.setDone(BuildStep::Arrangement);
+
+    reportProgress("Build plate preparation complete.", 40);
+    std::cout << "BuildPlate: Prepared " << objects_.size()
+              << " objects across " << regions_.size() << " regions.\n";
+
+    const auto plateBB = boundingBox();
+    std::cout << "  Plate bounding box: ["
+              << plateBB.min.x << ", " << plateBB.min.y << ", " << plateBB.min.z
+              << "] ? ["
+              << plateBB.max.x << ", " << plateBB.max.y << ", " << plateBB.max.z
+              << "]\n";
 }
 
 // ==============================================================================
-// BuildPlate: Export to Marc::Layer
+// BuildPlate — Processing Pipeline
 // ==============================================================================
 
-std::vector<Marc::Layer> BuildPlate::exportLayers() const {
-    // Collect all layers from all objects, sorted by printZ
-    struct LayerEntry {
-        double printZ;
-        double thickness;
-        const BuildLayer* layer;
-    };
+void BuildPlate::process()
+{
+    if (!prepared_) {
+        reportProgress("Auto-preparing build plate …", 0);
+        prepareBuildPlate();
+    }
 
-    std::vector<LayerEntry> allEntries;
+    reportProgress("Starting build plate processing …", 0);
+
+    // -------------------------------------------------------------------------
+    // Unified slicing: slice ALL models at the same Z-heights so that every
+    // output layer contains the scan paths of every model simultaneously.
+    // This replaces the old per-object obj->slice() loop.
+    // -------------------------------------------------------------------------
+    reportProgress("Unified slicing of all models …", 10);
+    sliceAllUnified();
+
+    // Post-slice steps run on per-object layer stacks that sliceAllUnified()
+    // populated in sync with the unified stack.
+    reportProgress("Adding anchor layers …", 30);
+    for (auto* obj : objects_) obj->addAnchorLayers();
+
+    reportProgress("Detecting surface types …", 50);
+    for (auto* obj : objects_) obj->detectSurfaceTypes();
+
+    reportProgress("Preparing infill …", 70);
+    for (auto* obj : objects_) obj->prepareInfill();
+
+    reportProgress("Generating support material …", 85);
+    for (auto* obj : objects_) obj->generateSupportMaterial();
+
+    reportProgress("Build plate processing complete.", 100);
+}
+
+// ==============================================================================
+// BuildPlate — Unified Slicing  (Task 1 — SLM-correct multi-model slicing)
+// ==============================================================================
+//
+// Design (ported from Legacy Model pipeline, extended for SLM):
+//
+//   1. Find the tallest model ? derive a single shared Z-height sequence using
+//      LayerHeightGenerator so every model is sliced at identical Z planes.
+//
+//   2. Allocate one BuildLayer per Z-height in unifiedLayers_.
+//      Each BuildLayer gets ONE BuildLayerRegion PER MODEL (region index ==
+//      object index) so per-model identity is preserved through region tags.
+//
+//   3. Slice every model's mesh at the shared sliceZ list.  The resulting
+//      ExPolygons are written into each layer's region that corresponds to
+//      that model.  Models that are shorter than the tallest simply produce
+//      empty regions above their own height.
+//
+//   4. The per-object PrintObject::layers_ is also populated in lock-step so
+//      that the legacy surface-detection and support-generation steps that
+//      operate on per-object stacks still work correctly.
+//
+// ==============================================================================
+
+void BuildPlate::sliceAllUnified()
+{
+    clearUnifiedLayers();
+    if (objects_.empty()) return;
+
+    // Ensure we have one region per object
+    while (regions_.size() < objects_.size()) addRegion();
+
+    // ------------------------------------------------------------------
+    // Step 1 – Determine the tallest model ? unified Z-height sequence
+    // ------------------------------------------------------------------
+    double maxHeight = 0.0;
     for (const auto* obj : objects_) {
-        for (size_t i = 0; i < obj->layerCount(); ++i) {
-            const auto* layer = obj->getLayer(i);
-            if (layer) {
-                allEntries.push_back({layer->printZ(), layer->height(), layer});
-            }
+        if (obj->sizeZ > maxHeight) maxHeight = obj->sizeZ;
+    }
+
+    if (maxHeight <= 0.0) {
+        std::cerr << "BuildPlate::sliceAllUnified: all models have zero height, "
+                     "skipping slicing.\n";
+        return;
+    }
+
+    // Use the first object's config (all objects share the plate config)
+    const SlmConfig& cfg = objects_.front()->config;
+
+    BP::LayerHeightGenerator layerGen;
+    const std::vector<double> zHeights =
+        layerGen.generate(cfg, maxHeight, cfg.first_layer_thickness);
+
+    if (zHeights.empty()) {
+        std::cerr << "BuildPlate::sliceAllUnified: LayerHeightGenerator "
+                     "returned empty sequence.\n";
+        return;
+    }
+
+    // Build the mid-plane Z list that the mesh slicer expects
+    std::vector<float> sliceZs;
+    sliceZs.reserve(zHeights.size());
+    {
+        double lo = 0.0;
+        for (const double zTop : zHeights) {
+            sliceZs.push_back(static_cast<float>(0.5 * (lo + zTop)));
+            lo = zTop;
         }
     }
 
-    // Sort by Z-height
-    std::sort(allEntries.begin(), allEntries.end(),
-        [](const LayerEntry& a, const LayerEntry& b) {
-            return a.printZ < b.printZ;
-        });
+    std::cout << "BuildPlate::sliceAllUnified: " << objects_.size()
+              << " models, " << zHeights.size()
+              << " unified layers (max height = " << maxHeight << " mm).\n";
 
-    // Convert to Marc::Layer format
-    std::vector<Marc::Layer> result;
-    result.reserve(allEntries.size());
+    // ------------------------------------------------------------------
+    // Step 2 – Allocate unified BuildLayer stack, one region per model
+    // ------------------------------------------------------------------
+    unifiedLayers_.reserve(zHeights.size());
 
-    for (size_t i = 0; i < allEntries.size(); ++i) {
-        const auto& entry = allEntries[i];
-        Marc::Layer marcLayer(
-            static_cast<uint32_t>(i),
-            static_cast<float>(entry.printZ),
-            static_cast<float>(entry.thickness));
+    // We use object[0] as the nominal owner of the unified layers; the
+    // per-object stacks are populated separately below.
+    PrintObject* nominalOwner = objects_[0];
 
-        const auto* buildLayer = entry.layer;
+    BuildLayer* prev = nullptr;
+    double lo = 0.0;
+    for (std::size_t li = 0; li < zHeights.size(); ++li) {
+        const double hi     = zHeights[li];
+        const double sliceZ = static_cast<double>(sliceZs[li]);
 
-        // Convert BuildLayerRegion data to Marc::Polyline
-        for (size_t ri = 0; ri < buildLayer->regionCount(); ++ri) {
-            const auto* region = buildLayer->getRegion(ri);
-            if (!region) continue;
+        auto* layer = new BuildLayer(li, nominalOwner, hi - lo, hi, sliceZ);
 
-            // Convert slice contours to Marc polylines
-            for (const auto& surf : region->slices) {
-                if (!surf.isValid()) continue;
-
-                Marc::Polyline polyline;
-                polyline.tag.layerNumber = static_cast<uint32_t>(i);
-
-                // Assign type based on surface classification
-                switch (surf.type) {
-                    case SurfaceType::Top:
-                        polyline.tag.type = Marc::GeometryType::Perimeter;
-                        polyline.tag.buildStyle = Marc::BuildStyleID::CoreContour_UpSkin;
-                        break;
-                    case SurfaceType::Bottom:
-                        polyline.tag.type = Marc::GeometryType::Perimeter;
-                        polyline.tag.buildStyle = Marc::BuildStyleID::CoreContourOverhang_DownSkin;
-                        break;
-                    case SurfaceType::Support:
-                        polyline.tag.type = Marc::GeometryType::SupportStructure;
-                        polyline.tag.buildStyle = Marc::BuildStyleID::SupportContour;
-                        break;
-                    default:
-                        polyline.tag.type = Marc::GeometryType::Perimeter;
-                        polyline.tag.buildStyle = Marc::BuildStyleID::CoreContour_Volume;
-                        break;
-                }
-
-                polyline.points.reserve(surf.contour.size() + 1);
-                for (const auto& pt : surf.contour) {
-                    float x = static_cast<float>(
-                        static_cast<double>(pt.x) * Geometry::MESH_SCALING_FACTOR);
-                    float y = static_cast<float>(
-                        static_cast<double>(pt.y) * Geometry::MESH_SCALING_FACTOR);
-                    polyline.points.emplace_back(x, y);
-                }
-                // Close the contour
-                if (!polyline.points.empty()) {
-                    polyline.points.push_back(polyline.points.front());
-                }
-
-                marcLayer.polylines.push_back(std::move(polyline));
-
-                // Convert holes
-                for (const auto& hole : surf.holes) {
-                    Marc::Polyline holeLine;
-                    holeLine.tag = polyline.tag;
-
-                    holeLine.points.reserve(hole.size() + 1);
-                    for (const auto& pt : hole) {
-                        float x = static_cast<float>(
-                            static_cast<double>(pt.x) * Geometry::MESH_SCALING_FACTOR);
-                        float y = static_cast<float>(
-                            static_cast<double>(pt.y) * Geometry::MESH_SCALING_FACTOR);
-                        holeLine.points.emplace_back(x, y);
-                    }
-                    if (!holeLine.points.empty()) {
-                        holeLine.points.push_back(holeLine.points.front());
-                    }
-
-                    marcLayer.polylines.push_back(std::move(holeLine));
-                }
-            }
-
-            // Convert support surfaces
-            for (const auto& surf : region->supportSurfaces) {
-                if (!surf.isValid()) continue;
-
-                Marc::Polyline supportLine;
-                supportLine.tag.layerNumber = static_cast<uint32_t>(i);
-                supportLine.tag.type = Marc::GeometryType::SupportStructure;
-                supportLine.tag.buildStyle = Marc::BuildStyleID::SupportContour;
-
-                supportLine.points.reserve(surf.contour.size() + 1);
-                for (const auto& pt : surf.contour) {
-                    float x = static_cast<float>(
-                        static_cast<double>(pt.x) * Geometry::MESH_SCALING_FACTOR);
-                    float y = static_cast<float>(
-                        static_cast<double>(pt.y) * Geometry::MESH_SCALING_FACTOR);
-                    supportLine.points.emplace_back(x, y);
-                }
-                if (!supportLine.points.empty()) {
-                    supportLine.points.push_back(supportLine.points.front());
-                }
-
-                marcLayer.polylines.push_back(std::move(supportLine));
-            }
+        // Add one BuildLayerRegion for every model so each model's
+        // contours land in its own region within the shared layer.
+        for (std::size_t oi = 0; oi < objects_.size(); ++oi) {
+            layer->addRegion(regions_[oi]);
         }
 
-        result.push_back(std::move(marcLayer));
+        if (prev) { prev->upperLayer = layer; layer->lowerLayer = prev; }
+        unifiedLayers_.push_back(layer);
+
+        prev = layer;
+        lo   = hi;
+    }
+    if (!unifiedLayers_.empty()) unifiedLayers_.back()->upperLayer = nullptr;
+
+    // ------------------------------------------------------------------
+    // Step 3 – Slice every model and populate regions in unified layers
+    // ------------------------------------------------------------------
+    for (std::size_t oi = 0; oi < objects_.size(); ++oi) {
+        auto* obj  = objects_[oi];
+        auto& proc = meshProcessors_[oi];
+
+        // Clear any stale per-object layer stack first
+        obj->clearLayers();
+
+        if (!proc || !proc->hasValidMesh()) {
+            std::cerr << "  Object " << oi << ": no valid mesh — skipped.\n";
+            continue;
+        }
+
+        // Slice this model at the SHARED Z list
+        const auto exPolysByLayer = proc->mesh_->slice(sliceZs);
+
+        // Populate unified layers (region index == object index)
+        // AND populate the per-object layer stack so surface-detection
+        // and support-generation still have data to work with.
+        lo = 0.0;
+        for (std::size_t li = 0;
+             li < zHeights.size() && li < unifiedLayers_.size();
+             ++li)
+        {
+            const double hi     = zHeights[li];
+            const double sliceZ = static_cast<double>(sliceZs[li]);
+
+            // --- Unified layer: region[oi] receives this model's contours ---
+            auto* unifiedLayer = unifiedLayers_[li];
+            auto* unifiedRegion = unifiedLayer->getRegion(oi);
+
+            // --- Per-object layer: one region, same geometry ----------------
+            auto* perObjLayer = obj->addLayer(li, hi - lo, hi, sliceZ);
+            perObjLayer->addRegion(regions_[oi]);
+
+            auto* perObjRegion = perObjLayer->getRegion(0);
+
+            // Wire up linked-list pointers for per-object stack
+            if (li > 0) {
+                auto* prevObjLayer = obj->getLayer(li - 1);
+                if (prevObjLayer) {
+                    prevObjLayer->upperLayer = perObjLayer;
+                    perObjLayer->lowerLayer  = prevObjLayer;
+                }
+            }
+
+            lo = hi;
+
+            // Convert ExPolygons and write into both region targets
+            if (li >= exPolysByLayer.size()) continue;
+
+            for (const auto& exPoly : exPolysByLayer[li]) {
+                ClassifiedSurface surf;
+                surf.contour.reserve(exPoly.contour.size());
+
+                for (const auto& pt : exPoly.contour)
+                    surf.contour.emplace_back(pt.x, pt.y);
+
+                for (const auto& hole : exPoly.holes) {
+                    Clipper2Lib::Path64 hp;
+                    hp.reserve(hole.size());
+                    for (const auto& pt : hole) hp.emplace_back(pt.x, pt.y);
+                    surf.holes.push_back(std::move(hp));
+                }
+
+                surf.type = SurfaceType::Internal;
+
+                // Write to unified region (shared multi-model layer)
+                if (unifiedRegion)
+                    unifiedRegion->slices.push_back(surf);
+
+                // Write to per-object region (for post-slice steps)
+                if (perObjRegion)
+                    perObjRegion->slices.push_back(std::move(surf));
+            }
+
+            // Merge slices for the per-object layer
+            perObjLayer->makeSlices();
+        }
+
+        // Mark the per-object slicing step as done so downstream steps
+        // (surface detection, infill, support) don't re-trigger a slice.
+        obj->state.setStarted(ObjectStep::Slicing);
+        obj->state.setDone(ObjectStep::Slicing);
+
+        std::cout << "  Object " << oi << " ('" << obj->buildPlate()
+                  << "'): sliced " << obj->layerCount() << " layers at "
+                  << zHeights.size() << " unified Z heights.\n";
     }
 
-    return result;
+    // Build mergedSlices for every unified layer (used by path planning)
+    for (auto* layer : unifiedLayers_) {
+        layer->makeSlices();
+    }
+
+    std::cout << "BuildPlate::sliceAllUnified: done — "
+              << unifiedLayers_.size() << " unified layers created.\n";
 }
 
 // ==============================================================================
-// BuildPlate: Bounding Box
+// BuildPlate — Validation
 // ==============================================================================
 
-Geometry::BBox3f BuildPlate::boundingBox() const {
+void BuildPlate::validate() const
+{
+    if (objects_.empty())
+        throw std::runtime_error("BuildPlate: No objects to process.");
+    if (config.layer_thickness <= 0.0)
+        throw std::runtime_error("BuildPlate: Invalid layer thickness.");
+    if (config.hatch_spacing <= 0.0)
+        throw std::runtime_error("BuildPlate: Invalid hatch spacing.");
+}
+
+// ==============================================================================
+// BuildPlate — Export  (uses unified layer stack when available)
+// ==============================================================================
+
+std::vector<Marc::Layer> BuildPlate::exportLayers() const
+{
+    BP::LayerExporter exporter;
+
+    // If unified slicing has been run, use the unified layer stack.
+    // Every unified layer already contains all models' contours in
+    // separate regions, so no interleaving occurs.
+    if (!unifiedLayers_.empty()) {
+        // Wrap unified layers in the format expected by LayerExporter
+        std::vector<std::vector<const BuildLayer*>> singleStack;
+        singleStack.emplace_back();
+        singleStack.back().reserve(unifiedLayers_.size());
+        for (const auto* l : unifiedLayers_)
+            singleStack.back().push_back(l);
+        return exporter.exportAll(singleStack);
+    }
+
+    // Fallback: legacy per-object export (all models sliced independently)
+    std::vector<std::vector<const BuildLayer*>> objectLayers;
+    objectLayers.reserve(objects_.size());
+    for (const auto* obj : objects_) {
+        std::vector<const BuildLayer*> objL;
+        objL.reserve(obj->layerCount());
+        for (std::size_t i = 0; i < obj->layerCount(); ++i)
+            objL.push_back(obj->getLayer(i));
+        objectLayers.push_back(std::move(objL));
+    }
+    return exporter.exportAll(objectLayers);
+}
+
+// ==============================================================================
+// BuildPlate — Bounding Box
+// ==============================================================================
+
+Geometry::BBox3f BuildPlate::boundingBox() const
+{
     Geometry::BBox3f bb;
     for (const auto* obj : objects_) {
-        const auto& objBB = obj->boundingBox();
-        Geometry::Vertex3f minV(
-            objBB.min.x + static_cast<float>(obj->placement.x),
-            objBB.min.y + static_cast<float>(obj->placement.y),
-            objBB.min.z + static_cast<float>(obj->placement.z));
-        Geometry::Vertex3f maxV(
-            objBB.max.x + static_cast<float>(obj->placement.x),
-            objBB.max.y + static_cast<float>(obj->placement.y),
-            objBB.max.z + static_cast<float>(obj->placement.z));
-        bb.merge(minV);
-        bb.merge(maxV);
+        const auto& ob = obj->boundingBox();
+        bb.merge(Geometry::Vertex3f(
+            ob.min.x + static_cast<float>(obj->placement.x),
+            ob.min.y + static_cast<float>(obj->placement.y),
+            ob.min.z + static_cast<float>(obj->placement.z)));
+        bb.merge(Geometry::Vertex3f(
+            ob.max.x + static_cast<float>(obj->placement.x),
+            ob.max.y + static_cast<float>(obj->placement.y),
+            ob.max.z + static_cast<float>(obj->placement.z)));
     }
     return bb;
 }
 
 // ==============================================================================
-// BuildPlate: State
+// BuildPlate — State
 // ==============================================================================
 
-bool BuildPlate::invalidateStep(BuildStep step) {
+bool BuildPlate::invalidateStep(BuildStep step)
+{
     return state.invalidate(step);
 }
 
-bool BuildPlate::invalidateAllSteps() {
-    bool invalidated = state.invalidateAll();
-    for (auto* obj : objects_) {
-        invalidated |= obj->invalidateAllSteps();
-    }
-    return invalidated;
+bool BuildPlate::invalidateAllSteps()
+{
+    bool inv = state.invalidateAll();
+    for (auto* obj : objects_) inv |= obj->invalidateAllSteps();
+    return inv;
 }
 
 // ==============================================================================
-// BuildPlate: Progress
+// BuildPlate — Progress
 // ==============================================================================
 
-void BuildPlate::reportProgress(const char* msg, int pct) {
+void BuildPlate::reportProgress(const char* msg, int pct)
+{
     if (progressCb_) progressCb_(msg, pct);
-    std::cout << "  [" << pct << "%] " << msg << std::endl;
+    std::cout << "  [" << pct << "%] " << msg << '\n';
+}
+
+// ==============================================================================
+// BuildPlate — arrangeModels  (Legacy Geometry::arrange() cell-grid algorithm)
+// ==============================================================================
+//
+// Ported faithfully from Legacy Slic3r Geometry::arrange():
+//
+//   1. Determine the largest model footprint ? uniform cell size
+//      = (maxW + gap) × (maxD + gap).
+//
+//   2. Compute how many cells fit inside the bed (cellw × cellh).
+//      Return false if total_parts > cellw*cellh.
+//
+//   3. For each candidate cell (i,j), compute a priority score equal to
+//      squared-distance from the bed centre — cells closer to the centre
+//      score lower and are filled first (nearest-to-centre packing).
+//
+//   4. Assign the sorted cells one per model.  Apply a final translation
+//      so the occupied sub-grid is centred on the bed.
+//
+// This matches the behaviour of Legacy Model::arrange_objects().
+// ==============================================================================
+
+bool BuildPlate::arrangeModels(double spacing)
+{
+    if (objects_.empty()) return true;
+
+    // Gap between models [mm] — enforce minimum 5 mm
+    const double gap = std::max(5.0, (spacing > 0.0) ? spacing
+                                                      : (double)config.duplicate_distance);
+
+    const double bedW = static_cast<double>(bedWidth_);
+    const double bedD = static_cast<double>(bedDepth_);
+
+    const std::size_t total = objects_.size();
+
+    // ------------------------------------------------------------------
+    // 1. Collect per-model sizes and compute the uniform cell dimensions
+    //    (largest footprint + gap on each side, as in Legacy arrange())
+    // ------------------------------------------------------------------
+    struct ModelInfo { std::size_t idx; double w; double d; };
+    std::vector<ModelInfo> infos;
+    infos.reserve(total);
+
+    double maxW = 0.0, maxD = 0.0;
+    for (std::size_t i = 0; i < total; ++i) {
+        if (!meshProcessors_[i] || !meshProcessors_[i]->hasValidMesh()) {
+            infos.push_back({i, 0.0, 0.0});
+            continue;
+        }
+        const auto bb = meshProcessors_[i]->getBoundingBox();
+        const double w = static_cast<double>(bb.sizeX());
+        const double d = static_cast<double>(bb.sizeY());
+        infos.push_back({i, w, d});
+        if (w > maxW) maxW = w;
+        if (d > maxD) maxD = d;
+    }
+
+    if (maxW <= 0.0 || maxD <= 0.0) return true;  // nothing to arrange
+
+    // Uniform cell = largest model + gap (half on each side)
+    const double cellW = maxW + gap;
+    const double cellD = maxD + gap;
+
+    // ------------------------------------------------------------------
+    // 2. How many cells fit inside the bed?
+    // ------------------------------------------------------------------
+    const std::size_t cellCols = static_cast<std::size_t>(
+        std::floor((bedW + gap) / cellW));
+    const std::size_t cellRows = static_cast<std::size_t>(
+        std::floor((bedD + gap) / cellD));
+
+    if (cellCols == 0 || cellRows == 0 || total > cellCols * cellRows) {
+        std::cerr << "BuildPlate::arrangeModels: " << total
+                  << " models do not fit on a " << bedW << "x" << bedD
+                  << " mm bed with " << gap << " mm gap.\n";
+        return false;
+    }
+
+    // ------------------------------------------------------------------
+    // 3. Build the full cell grid and sort by distance from bed centre
+    // ------------------------------------------------------------------
+    struct Cell {
+        std::size_t col, row;
+        double      cx, cy;   // cell centre in bed coords [mm]
+        double      dist;     // squared distance from bed centre
+    };
+
+    // Total cells bounding box (all cells packed flush from 0,0)
+    const double totalCellsW = cellCols * cellW;
+    const double totalCellsD = cellRows * cellD;
+
+    // Offset so the cell grid is centred on the bed
+    const double gridOffX = (bedW - totalCellsW) / 2.0;
+    const double gridOffY = (bedD - totalCellsD) / 2.0;
+
+    const double bedCX = bedW / 2.0;
+    const double bedCY = bedD / 2.0;
+
+    std::vector<Cell> cells;
+    cells.reserve(cellCols * cellRows);
+
+    for (std::size_t ci = 0; ci < cellCols; ++ci) {
+        for (std::size_t ri = 0; ri < cellRows; ++ri) {
+            Cell c;
+            c.col = ci;
+            c.row = ri;
+            // Centre of cell in bed coordinates
+            c.cx  = gridOffX + ci * cellW + cellW / 2.0;
+            c.cy  = gridOffY + ri * cellD + cellD / 2.0;
+            const double dx = c.cx - bedCX;
+            const double dy = c.cy - bedCY;
+            // Legacy tiebreaker: slightly favour columns closer to left
+            c.dist = dx*dx + dy*dy - std::abs((double)cellCols/2.0 - (ci + 0.5));
+            cells.push_back(c);
+        }
+    }
+
+    // Sort ascending by distance (nearest centre first)
+    std::sort(cells.begin(), cells.end(),
+              [](const Cell& a, const Cell& b){ return a.dist < b.dist; });
+
+    // ------------------------------------------------------------------
+    // 4. Assign the first `total` cells to models and apply translations
+    // ------------------------------------------------------------------
+    for (std::size_t mi = 0; mi < total; ++mi) {
+        const std::size_t oi   = infos[mi].idx;
+        const Cell&       cell = cells[mi];
+        auto&             proc = meshProcessors_[oi];
+
+        if (!proc || !proc->hasValidMesh()) continue;
+
+        const auto   bb    = proc->getBoundingBox();
+        const double mW    = static_cast<double>(bb.sizeX());
+        const double mD    = static_cast<double>(bb.sizeY());
+
+        // Centre model within its cell
+        const double destX = cell.cx - mW / 2.0;
+        const double destY = cell.cy - mD / 2.0;
+
+        const double dx = destX - static_cast<double>(bb.min.x);
+        const double dy = destY - static_cast<double>(bb.min.y);
+
+        proc->mesh_->translate(static_cast<float>(dx),
+                               static_cast<float>(dy), 0.0f);
+        proc->bbox_.reset();
+
+        objects_[oi]->placement.x += dx;
+        objects_[oi]->placement.y += dy;
+        if (oi < placements_.size()) {
+            placements_[oi].x += dx;
+            placements_[oi].y += dy;
+        }
+
+        std::cout << "  Model " << oi << ": cell [" << cell.col << "," << cell.row
+                  << "] ? (" << destX << ", " << destY << ") mm"
+                  << "  [size " << mW << " × " << mD << " mm]\n";
+    }
+
+    std::cout << "BuildPlate::arrangeModels: " << total
+              << " models in a " << cellCols << "x" << cellRows
+              << " grid, gap=" << gap << " mm, bed="
+              << bedW << "x" << bedD << " mm.\n";
+
+    invalidateStep(BuildStep::Arrangement);
+    clearUnifiedLayers();
+    return true;
+}
+
+// ==============================================================================
+// BuildPlate — validateNoOverlap / validateFitsInBed  (thin wrappers)
+// ==============================================================================
+
+void BuildPlate::validateNoOverlap() const
+{
+    preparator_.validateNoOverlap(meshProcessors_,
+                                  static_cast<float>(config.duplicate_distance));
+}
+
+void BuildPlate::validateFitsInBed() const
+{
+    preparator_.validateFitsInBed(meshProcessors_);
+}
+
+// ==============================================================================
+// BuildPlate — applyAllPlacements / bboxOverlapXY
+// ==============================================================================
+
+void BuildPlate::applyAllPlacements()
+{
+    preparator_.applyAllPlacements(placements_, meshProcessors_);
+}
+
+bool BuildPlate::bboxOverlapXY(const Geometry::BBox3f& a,
+                                const Geometry::BBox3f& b,
+                                float gap) noexcept
+{
+    return BP::BuildPlatePreparator::bboxOverlapXY(a, b, gap);
 }
 
 } // namespace MarcSLM
