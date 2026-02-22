@@ -464,6 +464,135 @@ void TriMesh::calculateVolume() {
 }
 
 // ==============================================================================
+// Geometric Transforms (ported from Legacy TriangleMesh)
+// ==============================================================================
+
+void TriMesh::translate(float dx, float dy, float dz) {
+    for (auto& f : facets_) {
+        for (int j = 0; j < 3; ++j) {
+            f.vertex[j].x += dx;
+            f.vertex[j].y += dy;
+            f.vertex[j].z += dz;
+        }
+    }
+    for (auto& v : sharedVertices_) {
+        v.x += dx;
+        v.y += dy;
+        v.z += dz;
+    }
+    if (bbox_.valid()) {
+        bbox_.min.x += dx; bbox_.min.y += dy; bbox_.min.z += dz;
+        bbox_.max.x += dx; bbox_.max.y += dy; bbox_.max.z += dz;
+    }
+}
+
+void TriMesh::scale(float factor) {
+    scale(factor, factor, factor);
+}
+
+void TriMesh::scale(float sx, float sy, float sz) {
+    for (auto& f : facets_) {
+        for (int j = 0; j < 3; ++j) {
+            f.vertex[j].x *= sx;
+            f.vertex[j].y *= sy;
+            f.vertex[j].z *= sz;
+        }
+        // Recompute normal after non-uniform scale
+        float ax = f.vertex[1].x - f.vertex[0].x;
+        float ay = f.vertex[1].y - f.vertex[0].y;
+        float az = f.vertex[1].z - f.vertex[0].z;
+        float bx = f.vertex[2].x - f.vertex[0].x;
+        float by = f.vertex[2].y - f.vertex[0].y;
+        float bz = f.vertex[2].z - f.vertex[0].z;
+        float nx = ay * bz - az * by;
+        float ny = az * bx - ax * bz;
+        float nz = ax * by - ay * bx;
+        float len = std::sqrt(nx * nx + ny * ny + nz * nz);
+        if (len > 0.0f) {
+            f.normal = {nx / len, ny / len, nz / len};
+        }
+    }
+    for (auto& v : sharedVertices_) {
+        v.x *= sx; v.y *= sy; v.z *= sz;
+    }
+    computeBBox();
+}
+
+void TriMesh::rotateX(float angleRad) {
+    const float c = std::cos(angleRad);
+    const float s = std::sin(angleRad);
+    auto rotVert = [c, s](Vertex3f& v) {
+        float y = v.y * c - v.z * s;
+        float z = v.y * s + v.z * c;
+        v.y = y; v.z = z;
+    };
+    for (auto& f : facets_) {
+        for (int j = 0; j < 3; ++j) rotVert(f.vertex[j]);
+        rotVert(f.normal);
+    }
+    for (auto& v : sharedVertices_) rotVert(v);
+    computeBBox();
+}
+
+void TriMesh::rotateY(float angleRad) {
+    const float c = std::cos(angleRad);
+    const float s = std::sin(angleRad);
+    auto rotVert = [c, s](Vertex3f& v) {
+        float x =  v.x * c + v.z * s;
+        float z = -v.x * s + v.z * c;
+        v.x = x; v.z = z;
+    };
+    for (auto& f : facets_) {
+        for (int j = 0; j < 3; ++j) rotVert(f.vertex[j]);
+        rotVert(f.normal);
+    }
+    for (auto& v : sharedVertices_) rotVert(v);
+    computeBBox();
+}
+
+void TriMesh::rotateZ(float angleRad) {
+    const float c = std::cos(angleRad);
+    const float s = std::sin(angleRad);
+    auto rotVert = [c, s](Vertex3f& v) {
+        float x = v.x * c - v.y * s;
+        float y = v.x * s + v.y * c;
+        v.x = x; v.y = y;
+    };
+    for (auto& f : facets_) {
+        for (int j = 0; j < 3; ++j) rotVert(f.vertex[j]);
+        rotVert(f.normal);
+    }
+    for (auto& v : sharedVertices_) rotVert(v);
+    computeBBox();
+}
+
+void TriMesh::alignToGround() {
+    if (facets_.empty()) return;
+    computeBBox();
+    translate(0.0f, 0.0f, -bbox_.min.z);
+}
+
+void TriMesh::centerXY(float cx, float cy) {
+    if (facets_.empty()) return;
+    computeBBox();
+    float midX = (bbox_.min.x + bbox_.max.x) * 0.5f;
+    float midY = (bbox_.min.y + bbox_.max.y) * 0.5f;
+    translate(cx - midX, cy - midY, 0.0f);
+}
+
+void TriMesh::merge(const TriMesh& other) {
+    facets_.insert(facets_.end(), other.facets_.begin(), other.facets_.end());
+    // Topology is now invalid — neighbors, shared vertices, etc. are stale
+    neighbors_.clear();
+    vertexIndices_.clear();
+    sharedVertices_.clear();
+    repaired_ = false;
+    stats_ = MeshStats{};
+    stats_.numFacets = facets_.size();
+    computeBBox();
+}
+
+// ==============================================================================
 // Slicing: Build Edge-Facet Tables
 // ==============================================================================
 
