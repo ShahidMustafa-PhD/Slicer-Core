@@ -17,6 +17,10 @@ MarcAPI::MarcAPI(float bed_width, float bed_depth, float spacing)
     , bed_depth_(bed_depth)
     , spacing_(spacing)
     , slmPrint_(std::make_unique<SlmPrint>()) {
+    // Pass initial bed dimensions to the build plate.
+    // These will be overridden by values from the JSON config file once
+    // loadSlmConfig() is called (via bedWidth / bedDepth keys).
+    slmPrint_->buildPlate().setBedSize(bed_width, bed_depth);
 }
 
 MarcAPI::~MarcAPI() = default;

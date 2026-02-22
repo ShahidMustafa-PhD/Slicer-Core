@@ -28,6 +28,11 @@ bool SlmPrint::loadSlmConfig(const std::filesystem::path& configPath) {
         }
         bool ok = SlmConfigReader::loadFromFile(configPath.string(), config_);
         if (ok) {
+            // Apply bed size from config BEFORE applyConfig so the
+            // preparator and BuildPlate both see the correct dimensions.
+            buildPlate_.setBedSize(
+                static_cast<float>(config_.bedWidth),
+                static_cast<float>(config_.bedDepth));
             buildPlate_.applyConfig(config_);
         }
         return ok;
@@ -93,6 +98,13 @@ bool SlmPrint::processBuildPlate() {
     try {
         reportProgress("Processing build plate...", 10);
         buildPlate_.setProgressCallback(progressCb_);
+
+        // Prepare the build plate: apply placements, validate, arrange
+        if (!buildPlate_.isPrepared()) {
+            reportProgress("Preparing build plate...", 5);
+            buildPlate_.prepareBuildPlate();
+        }
+
         buildPlate_.process();
 
         // Extract layers from build plate
@@ -260,29 +272,30 @@ bool SlmPrint::exportSVG(const std::string& outputDir) {
 
         reportProgress("Exporting SVG layers...", 90);
 
+        const float bedW = static_cast<float>(config_.bedWidth);
+        const float bedD = static_cast<float>(config_.bedDepth);
+
         for (const auto& layer : layers_) {
             std::string outputPath =
                 (svgDir / ("Layer" + std::to_string(layer.layerNumber) + ".svg")).string();
 
-            SVGExporter svg(outputPath.c_str());
+            // Pass bed dimensions so the canvas is correctly sized and
+            // 1 SVG unit == 1 mm (enables lossless zooming to 500x+).
+            SVGExporter svg(outputPath.c_str(), bedW, bedD);
 
-            // Draw origin marker
-            svg.draw(Marc::Point(0.0f, 0.0f), "red", 0.1f);
-            svg.draw(Marc::Point(0.0f, 0.0f), "none", 80.0f);
-
-            // Draw hatches
+            // Draw hatches — 0.04 mm stroke (visible at high zoom)
             for (const auto& hatch : layer.hatches) {
-                svg.draw(hatch.lines, "green", 0.4f);
+                svg.draw(hatch.lines, "green");
             }
 
-            // Draw polylines (contours/perimeters)
+            // Draw polylines (contours / perimeters) — 0.05 mm stroke
             for (const auto& polyline : layer.polylines) {
-                svg.draw(polyline, "black", 0.2f);
+                svg.draw(polyline, "blue");
             }
 
-            // Draw polygons
+            // Draw polygons (outlines) — 0.05 mm stroke
             for (const auto& polygon : layer.polygons) {
-                svg.draw(polygon, "red", 0.2f);
+                svg.draw(polygon, "red");
             }
 
             svg.Close();
@@ -302,28 +315,25 @@ bool SlmPrint::exportSegmentSVG(const std::string& outputDir) {
             std::filesystem::path(outputDir) / "SvgLayers_slm";
         std::filesystem::create_directories(svgDir);
 
+        const float bedW = static_cast<float>(config_.bedWidth);
+        const float bedD = static_cast<float>(config_.bedDepth);
+
         auto classified = classify();
 
         for (const auto& clayer : classified) {
             std::string outputPath =
                 (svgDir / ("Layer" + std::to_string(clayer.layerNumber) + ".svg")).string();
 
-            SVGExporter svg(outputPath.c_str());
+            SVGExporter svg(outputPath.c_str(), bedW, bedD);
 
-            svg.draw(Marc::Point(0.0f, 0.0f), "red", 0.1f);
-            svg.draw(Marc::Point(0.0f, 0.0f), "none", 80.0f);
+            // --- Draw hatch segments with their thermal colours ----------
+            svg.draw(clayer.segmentHatches);
 
-            // Draw hatch segments with thermal colours
-            for (const auto& seg : clayer.segmentHatches) {
-                std::string color = thermalSegmentColor(seg.type);
-                svg.draw(seg.hatches, color, 0.4f);
-            }
+            // --- Draw polyline segments with their thermal colours -------
+            svg.draw(clayer.segmentPolylines);
 
-            // Draw polyline segments with thermal colours
-            for (const auto& seg : clayer.segmentPolylines) {
-                std::string color = thermalSegmentColor(seg.type);
-                svg.draw(seg.polylines, color, 0.2f);
-            }
+            // --- Draw the 22-entry thermal segment colour legend ---------
+            svg.draw_thermal_legend();
 
             svg.Close();
         }
