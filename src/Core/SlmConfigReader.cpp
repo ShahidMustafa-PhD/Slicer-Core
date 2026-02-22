@@ -135,9 +135,13 @@ void applyJsonToConfig(const std::string& json, SlmConfig& config) {
     // General
     tryGetBool(json,   "adaptive_slicing",     config.adaptive_slicing);
     tryGetBool(json,   "complete_objects",      config.complete_objects);
-    tryGetDouble(json, "duplicate_distance",   config.duplicate_distance);
+	tryGetDouble(json, "duplicate_distance", config.duplicate_distance);
     tryGetBool(json,   "match_horizontal_surfaces", config.match_horizontal_surfaces);
     tryGetBool(json,   "interface_shells",     config.interface_shells);
+
+    // Build plate dimensions — read from JSON; fall back to struct defaults (120 mm)
+    tryGetDouble(json, "bedWidth",  config.bedWidth);
+    tryGetDouble(json, "bedDepth",  config.bedDepth);
 }
 
 } // anonymous namespace
