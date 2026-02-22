@@ -31,6 +31,9 @@ set(TEST_SOURCES
     
     # Build plate tests
     test_build_plate.cpp
+    
+    # Build plate preparation tests
+    test_build_plate_preparation.cpp
 )
 
 # Only create test executable if we have test sources
