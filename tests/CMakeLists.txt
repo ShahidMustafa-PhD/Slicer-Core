@@ -22,6 +22,8 @@ set(TEST_SOURCES
     
     # Thermal classification tests
     test_thermal_segments.cpp
+    test_scan_segment_classifier.cpp
+    test_thermal_region_hatcher.cpp
     
     # MarcFile binary I/O tests
     test_marc_file_io.cpp
