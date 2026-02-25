@@ -193,30 +193,79 @@ bool SlmPrint::generatePaths() {
     for (size_t i = 0; i < layers_.size(); ++i) {
         auto& layer = layers_[i];
 
-        // For each polyline (contour) in the layer, generate hatches
-        for (const auto& polyline : layer.polylines) {
-            if (polyline.points.size() < 3) continue;
+        // Rotate hatch angle by 67° per layer (industry standard SLM practice)
+        double layerAngle = config_.hatch_angle + (i * 67.0);
+        layerAngle = std::fmod(layerAngle, 360.0);
 
-            // Convert polyline to polygon for hatching
-            Marc::Polygon polygon;
-            polygon.points = polyline.points;
-            polygon.tag = polyline.tag;
-            polygon.tag.type = Marc::GeometryType::CoreHatch;
-            polygon.tag.buildStyle = Marc::BuildStyleID::CoreHatch_Volume;
+        // ---- Preferred path: Use ExPolygons (contour + holes) ----
+        // This is the correct SLM hatching approach: generate parallel lines
+        // covering the contour, then clip to (contour MINUS holes) using
+        // Clipper2's open-path intersection. Holes are naturally excluded.
+        if (!layer.exPolygons.empty()) {
+            for (const auto& exPoly : layer.exPolygons) {
+                if (!exPoly.contour.isValid()) continue;
 
-            // Rotate hatch angle by 67° per layer (industry standard)
-            double layerAngle = config_.hatch_angle + (i * 67.0);
-            layerAngle = std::fmod(layerAngle, 360.0);
+                // Convert contour to Clipper2 Path64
+                Clipper2Lib::Path64 contourPath;
+                contourPath.reserve(exPoly.contour.points.size());
+                for (const auto& pt : exPoly.contour.points) {
+                    contourPath.emplace_back(
+                        MarcSLM::Core::mmToClipperUnits(static_cast<double>(pt.x)),
+                        MarcSLM::Core::mmToClipperUnits(static_cast<double>(pt.y)));
+                }
 
-            auto hatchLines = hatchGen.generateHatches(polygon, layerAngle);
+                // Convert holes to Clipper2 Paths64
+                Clipper2Lib::Paths64 holePaths;
+                holePaths.reserve(exPoly.holes.size());
+                for (const auto& hole : exPoly.holes) {
+                    if (hole.points.size() < 3) continue;
+                    Clipper2Lib::Path64 holePath;
+                    holePath.reserve(hole.points.size());
+                    for (const auto& pt : hole.points) {
+                        holePath.emplace_back(
+                            MarcSLM::Core::mmToClipperUnits(static_cast<double>(pt.x)),
+                            MarcSLM::Core::mmToClipperUnits(static_cast<double>(pt.y)));
+                    }
+                    holePaths.push_back(std::move(holePath));
+                }
 
-            if (!hatchLines.empty()) {
-                Marc::Hatch hatch;
-                hatch.tag.type = Marc::GeometryType::CoreHatch;
-                hatch.tag.buildStyle = Marc::BuildStyleID::CoreHatch_Volume;
-                hatch.tag.layerNumber = layer.layerNumber;
-                hatch.lines = std::move(hatchLines);
-                layer.hatches.push_back(std::move(hatch));
+                // Generate hatches: lines clipped to (contour - holes)
+                auto hatchLines = hatchGen.generateHatches(
+                    contourPath, holePaths, layerAngle);
+
+                if (!hatchLines.empty()) {
+                    Marc::Hatch hatch;
+                    hatch.tag.type = Marc::GeometryType::CoreHatch;
+                    hatch.tag.buildStyle = Marc::BuildStyleID::CoreHatch_Volume;
+                    hatch.tag.layerNumber = layer.layerNumber;
+                    hatch.lines = std::move(hatchLines);
+                    layer.hatches.push_back(std::move(hatch));
+                }
+            }
+        }
+        // ---- Fallback path: Use polylines (no hole info) ----
+        // For layers without ExPolygons (e.g. build plate layers created
+        // externally), fall back to the original polyline-based hatching.
+        else {
+            for (const auto& polyline : layer.polylines) {
+                if (polyline.points.size() < 3) continue;
+
+                Marc::Polygon polygon;
+                polygon.points = polyline.points;
+                polygon.tag = polyline.tag;
+                polygon.tag.type = Marc::GeometryType::CoreHatch;
+                polygon.tag.buildStyle = Marc::BuildStyleID::CoreHatch_Volume;
+
+                auto hatchLines = hatchGen.generateHatches(polygon, layerAngle);
+
+                if (!hatchLines.empty()) {
+                    Marc::Hatch hatch;
+                    hatch.tag.type = Marc::GeometryType::CoreHatch;
+                    hatch.tag.buildStyle = Marc::BuildStyleID::CoreHatch_Volume;
+                    hatch.tag.layerNumber = layer.layerNumber;
+                    hatch.lines = std::move(hatchLines);
+                    layer.hatches.push_back(std::move(hatch));
+                }
             }
         }
 
@@ -279,8 +328,6 @@ bool SlmPrint::exportSVG(const std::string& outputDir) {
             std::string outputPath =
                 (svgDir / ("Layer" + std::to_string(layer.layerNumber) + ".svg")).string();
 
-            // Pass bed dimensions so the canvas is correctly sized and
-            // 1 SVG unit == 1 mm (enables lossless zooming to 500x+).
             SVGExporter svg(outputPath.c_str(), bedW, bedD);
 
             // Draw hatches — 0.04 mm stroke (visible at high zoom)
@@ -288,14 +335,29 @@ bool SlmPrint::exportSVG(const std::string& outputDir) {
                 svg.draw(hatch.lines, "green");
             }
 
-            // Draw polylines (contours / perimeters) — 0.05 mm stroke
+            // Draw contour polylines — blue
             for (const auto& polyline : layer.polylines) {
                 svg.draw(polyline, "blue");
             }
 
-            // Draw polygons (outlines) — 0.05 mm stroke
+            // Draw polygons (outlines) — red
             for (const auto& polygon : layer.polygons) {
                 svg.draw(polygon, "red");
+            }
+
+            // Draw ExPolygon contours (blue) and holes (red, dashed would
+            // require CSS support — use a distinct colour instead)
+            for (const auto& exPoly : layer.exPolygons) {
+                // Contour as closed polygon outline
+                if (exPoly.contour.isValid()) {
+                    svg.draw(exPoly.contour, "blue");
+                }
+                // Holes in a distinct colour (dark red)
+                for (const auto& hole : exPoly.holes) {
+                    if (hole.isValid()) {
+                        svg.draw(hole, "#8B0000");
+                    }
+                }
             }
 
             svg.Close();
