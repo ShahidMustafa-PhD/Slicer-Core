@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="2020.0000mm" height="1600.0000mm"
+     viewBox="0 0 202.000000 160.000000">
+  <!--
+    Build plate : 150.00 x 150.00 mm
+    Coordinate  : 1 SVG unit = 1 mm
+    Display zoom: 10x  (width/height = viewBox x 10)
+    Hatch stroke: 0.04 mm = ~28 mm on screen at this zoom
+    Legend panel: right margin (42 mm wide)
+  -->
+  <defs>
+    <marker id="endArrow" markerWidth="2" markerHeight="1.4"
+            refX="0" refY="0.7" orient="auto"
+            markerUnits="strokeWidth">
+      <polyline fill="darkblue" points="0,0 2,0.7 0,1.4 0.2,0.7"/>
+    </marker>
+  </defs>
+  <!-- Background -->
+  <rect x="0" y="0" width="202.000000" height="160.000000" fill="#f0f0f0" stroke="none"/>
+  <!-- Build plate boundary (150 x 150 mm) -->
+  <rect x="5.000000" y="5.000000" width="150.000000" height="150.000000"
+        fill="#ffffff" stroke="#aaaaaa" stroke-width="0.2" stroke-dasharray="1,0.5"/>
+  <!-- Build plate centre circle (r = 75.00 mm) -->
+  <circle cx="80.000000" cy="80.000000" r="75.000000"
+          fill="none" stroke="#bbbbbb" stroke-width="0.15" stroke-dasharray="0.8,0.4"/>
+  <!-- Centre cross-hair -->
+  <line x1="5.000000" y1="80.000000" x2="155.000000" y2="80.000000" stroke="#cccccc" stroke-width="0.1"/>
+  <line x1="80.000000" y1="5.000000" x2="80.000000" y2="155.000000" stroke="#cccccc" stroke-width="0.1"/>
+  <circle cx="80.000000" cy="80.000000" r="0.3" fill="#cccccc" stroke="none"/>
+  <!-- Corner labels -->
+  <text x="5.400000" y="4.600000" font-family="sans-serif" font-size="2" fill="#888888">0,0</text>
+  <text x="154.600006" y="4.600000" font-family="sans-serif" font-size="2" fill="#888888" text-anchor="end">150,0</text>
+  <text x="5.400000" y="157.199997" font-family="sans-serif" font-size="2" fill="#888888">0,150</text>
+  <!-- Layer geometry -->
+  <g id="geometry">
+    <g class="thermal-hatch" data-segment="8" data-name="CoreNormalHatch">
+      <line x1="51.25670" y1="115.91583" x2="50.92150" y2="114.01481" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="51.35720" y1="115.90988" x2="51.06743" y2="114.26656" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="51.45690" y1="115.89945" x2="51.20165" y2="114.45186" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="51.55660" y1="115.88902" x2="51.47339" y2="115.41711" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="51.65631" y1="115.87859" x2="51.60397" y2="115.58176" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="51.75601" y1="115.86816" x2="51.73454" y2="115.74641" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="51.13924" y1="115.82556" x2="50.77733" y2="113.77304" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="51.02082" y1="115.72982" x2="50.64751" y2="113.61271" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="50.90094" y1="115.62583" x2="50.51770" y2="113.45238" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="50.78106" y1="115.52184" x2="50.38750" y2="113.28986" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="50.66118" y1="115.41785" x2="50.24813" y2="113.07532" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="50.54130" y1="115.31386" x2="50.10876" y2="112.86079" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="51.43777" y1="115.21509" x2="51.33587" y2="114.63715" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="50.42142" y1="115.20987" x2="49.97478" y2="112.67684" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="50.29705" y1="115.08041" x2="49.85112" y2="112.55136" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="51.48700" y1="114.91837" x2="51.47008" y2="114.82246" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="50.16650" y1="114.91589" x2="49.74819" y2="112.54353" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="50.03595" y1="114.75135" x2="49.64527" y2="112.53569" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="49.90539" y1="114.58682" x2="49.54234" y2="112.52785" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="49.78125" y1="114.45868" x2="49.43941" y2="112.52001" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="49.64096" y1="114.23894" x2="49.33649" y2="112.51218" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="49.47226" y1="113.85801" x2="49.23357" y2="112.50434" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="49.31191" y1="113.52453" x2="49.13065" y2="112.49651" stroke="#228B22" stroke-width="0.04000"/>
+    </g>
+    <g class="thermal-hatch" data-segment="8" data-name="CoreNormalHatch">
+      <line x1="49.72790" y1="112.83270" x2="49.81260" y2="112.93770" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="49.81260" y1="112.93770" x2="50.15820" y2="113.46930" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="50.15820" y1="113.46930" x2="50.59740" y2="114.01150" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="50.59740" y1="114.01150" x2="50.74590" y2="114.31700" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="50.74590" y1="114.31700" x2="51.19060" y2="114.93120" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="51.19060" y1="114.93120" x2="51.10930" y2="115.42270" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="51.10930" y1="115.42270" x2="50.60850" y2="114.98830" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="50.60850" y1="114.98830" x2="50.56360" y2="114.94970" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="50.56360" y1="114.94970" x2="50.11490" y2="114.38450" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="50.11490" y1="114.38450" x2="49.94670" y2="114.21330" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="49.94670" y1="114.21330" x2="49.60630" y2="113.44450" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="49.60630" y1="113.44450" x2="49.53850" y2="113.34120" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="49.53850" y1="113.34120" x2="49.39580" y2="112.80740" stroke="#228B22" stroke-width="0.04000"/>
+      <line x1="49.39580" y1="112.80740" x2="49.72790" y2="112.83270" stroke="#228B22" stroke-width="0.04000"/>
+    </g>
+    <g class="thermal-contour" data-segment="1" data-name="CoreContour_Volume">
+    <path d="M 49.8749 112.553 L 50.0489 112.769 L 50.3931 113.299 L 50.8442 113.856 L 50.9956 114.167 L 51.4968 114.859 L 51.4162 115.345 L 51.8254 115.861 L 51.8254 115.861 L 51.2619 115.92 L 51.0686 115.771 L 50.4191 115.208 L 50.3537 115.152 L 49.8974 114.577 L 49.7031 114.379 L 49.3508 113.584 L 49.2706 113.462 L 49.0698 112.71 L 49.0861 112.493 L 49.8749 112.553" fill="none" stroke="#000000" stroke-width="0.05000" fill-rule="evenodd" fill-opacity="1.000"/>
+    </g>
+    <g class="thermal-contour" data-segment="1" data-name="CoreContour_Volume">
+    <path d="M 49.7735 112.746 L 49.8859 112.885 L 50.2311 113.416 L 50.6741 113.963 L 50.8234 114.271 L 51.2856 114.909 L 51.2044 115.4 L 51.4423 115.7 L 51.3203 115.712 L 51.1942 115.616 L 50.5497 115.056 L 50.4983 115.012 L 50.0474 114.444 L 49.8711 114.265 L 49.527 113.488 L 49.4554 113.379 L 49.2762 112.708 L 49.7735 112.746" fill="none" stroke="#000000" stroke-width="0.05000" fill-rule="evenodd" fill-opacity="1.000"/>
+    <path d="M 49.5385 113.341 L 49.6063 113.445 L 49.9467 114.213 L 50.1149 114.384 L 50.5636 114.95 L 50.6085 114.988 L 51.1093 115.423 L 51.1906 114.931 L 50.7459 114.317 L 50.5974 114.011 L 50.1582 113.469 L 49.8126 112.938 L 49.7279 112.833 L 49.3958 112.807 L 49.5385 113.341" fill="none" stroke="#000000" stroke-width="0.05000" fill-rule="evenodd" fill-opacity="1.000"/>
+    </g>
+    <g class="thermal-contour" data-segment="3" data-name="HollowShell1Contour_Volume">
+    <path d="M 49.8588 112.552 L 50.1109 112.864 L 50.3931 113.299 L 50.8442 113.856 L 50.9956 114.167 L 51.4968 114.859 L 51.4162 115.345 L 51.8254 115.861 L 51.2619 115.92 L 51.0686 115.771 L 50.4191 115.208 L 50.3537 115.152 L 49.8974 114.577 L 49.7031 114.379 L 49.3508 113.584 L 49.2706 113.462 L 49.0698 112.71 L 49.0861 112.493 L 49.8588 112.552" fill="none" stroke="#0000CC" stroke-width="0.05000" fill-rule="evenodd" fill-opacity="1.000"/>
+    <path d="M 49.1707 112.701 L 49.363 113.42 L 49.4389 113.536 L 49.7871 114.322 L 49.9724 114.51 L 50.426 115.082 L 50.4844 115.132 L 51.1314 115.693 L 51.2911 115.816 L 51.6339 115.78 L 51.3103 115.372 L 51.3912 114.884 L 50.9095 114.219 L 50.759 113.909 L 50.3121 113.357 L 49.9674 112.827 L 49.8242 112.65 L 49.1782 112.6 L 49.1707 112.701" fill="none" stroke="#0000CC" stroke-width="0.05000" fill-rule="evenodd" fill-opacity="1.000"/>
+    </g>
+    <g class="thermal-contour" data-segment="4" data-name="HollowShell1Contour_Overhang">
+    <path d="M 49.8749 112.553 L 50.0489 112.769 L 50.1111 112.864 L 49.8588 112.552 L 49.8749 112.553" fill="none" stroke="#000080" stroke-width="0.05000" fill-rule="evenodd" fill-opacity="1.000"/>
+    </g>
+    <g class="thermal-contour" data-segment="5" data-name="HollowShell2Contour_Volume">
+    <path d="M 49.8242 112.65 L 49.9674 112.827 L 50.3121 113.357 L 50.759 113.909 L 50.9095 114.219 L 51.3912 114.884 L 51.3103 115.372 L 51.6339 115.78 L 51.2911 115.816 L 51.1314 115.693 L 50.4844 115.132 L 50.426 115.082 L 49.9724 114.51 L 49.7871 114.322 L 49.4389 113.536 L 49.363 113.42 L 49.1707 112.701 L 49.1782 112.6 L 49.8242 112.65" fill="none" stroke="#B8860B" stroke-width="0.05000" fill-rule="evenodd" fill-opacity="1.000"/>
+    <path d="M 49.4554 113.379 L 49.527 113.488 L 49.8711 114.265 L 50.0474 114.444 L 50.4983 115.012 L 50.5497 115.056 L 51.1942 115.616 L 51.3203 115.712 L 51.4423 115.7 L 51.2044 115.4 L 51.2856 114.909 L 50.8234 114.271 L 50.6741 113.963 L 50.2311 113.416 L 49.8859 112.885 L 49.7735 112.746 L 49.2762 112.708 L 49.4554 113.379" fill="none" stroke="#B8860B" stroke-width="0.05000" fill-rule="evenodd" fill-opacity="1.000"/>
+    </g>
+    <g class="thermal-contour" data-segment="9" data-name="CoreContourHatch">
+    <path d="M 49.7416 112.807 L 49.8345 112.922 L 50.1797 113.453 L 50.6203 113.997 L 50.7691 114.303 L 51.2191 114.924 L 51.1281 115.475 L 50.5909 115.009 L 50.5441 114.968 L 50.0949 114.403 L 49.924 114.229 L 49.5825 113.457 L 49.5135 113.352 L 49.3599 112.778 L 49.7416 112.807" fill="none" stroke="#800080" stroke-width="0.05000" fill-rule="evenodd" fill-opacity="1.000"/>
+    <path d="M 49.5385 113.341 L 49.6063 113.445 L 49.9467 114.213 L 50.1149 114.384 L 50.5636 114.95 L 50.6085 114.988 L 51.1093 115.423 L 51.1906 114.931 L 50.7459 114.317 L 50.5974 114.011 L 50.1582 113.469 L 49.8126 112.938 L 49.7279 112.833 L 49.3958 112.807 L 49.5385 113.341" fill="none" stroke="#800080" stroke-width="0.05000" fill-rule="evenodd" fill-opacity="1.000"/>
+    </g>
+    <!-- ===== Thermal Segment Colour Legend ===== -->
+    <g id="thermal-legend">
+    <rect x="161.0000" y="5.0000" width="40.0000" height="72.0000"
+          rx="1" ry="1"
+          fill="#fafafa" stroke="#cccccc" stroke-width="0.15"/>
+    <text x="181.0000" y="7.6000" font-family="sans-serif" font-size="2.2000" font-weight="bold" fill="#222222" text-anchor="middle">Thermal Segments</text>
+    <line x1="161.5000" y1="8.7000" x2="200.5000" y2="8.7000" stroke="#bbbbbb" stroke-width="0.1"/>
+    <rect x="161.8000" y="9.0000" width="3.5000" height="2.0000" fill="#000000" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="10.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end"> 1</text>
+    <text x="169.6000" y="10.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">CoreContour_Volume</text>
+    <rect x="161.8000" y="12.0000" width="3.5000" height="2.0000" fill="#8B0000" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="13.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end"> 2</text>
+    <text x="169.6000" y="13.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">CoreContour_Overhang</text>
+    <rect x="161.8000" y="15.0000" width="3.5000" height="2.0000" fill="#0000CC" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="16.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end"> 3</text>
+    <text x="169.6000" y="16.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">Shell1Contour_Volume</text>
+    <rect x="161.8000" y="18.0000" width="3.5000" height="2.0000" fill="#000080" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="19.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end"> 4</text>
+    <text x="169.6000" y="19.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">Shell1Contour_Overhang</text>
+    <rect x="161.8000" y="21.0000" width="3.5000" height="2.0000" fill="#B8860B" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="22.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end"> 5</text>
+    <text x="169.6000" y="22.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">Shell2Contour_Volume</text>
+    <rect x="161.8000" y="24.0000" width="3.5000" height="2.0000" fill="#006400" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="25.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end"> 6</text>
+    <text x="169.6000" y="25.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">Shell2Contour_Overhang</text>
+    <rect x="161.8000" y="27.0000" width="3.5000" height="2.0000" fill="#FF8C00" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="28.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end"> 7</text>
+    <text x="169.6000" y="28.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">CoreOverhangHatch</text>
+    <rect x="161.8000" y="30.0000" width="3.5000" height="2.0000" fill="#228B22" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="31.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end"> 8</text>
+    <text x="169.6000" y="31.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">CoreNormalHatch</text>
+    <rect x="161.8000" y="33.0000" width="3.5000" height="2.0000" fill="#800080" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="34.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end"> 9</text>
+    <text x="169.6000" y="34.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">CoreContourHatch</text>
+    <rect x="161.8000" y="36.0000" width="3.5000" height="2.0000" fill="#FF69B4" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="37.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end">10</text>
+    <text x="169.6000" y="37.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">Shell1OverhangHatch</text>
+    <rect x="161.8000" y="39.0000" width="3.5000" height="2.0000" fill="#00CED1" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="40.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end">11</text>
+    <text x="169.6000" y="40.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">Shell1NormalHatch</text>
+    <rect x="161.8000" y="42.0000" width="3.5000" height="2.0000" fill="#FF00FF" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="43.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end">12</text>
+    <text x="169.6000" y="43.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">Shell1ContourHatch</text>
+    <rect x="161.8000" y="45.0000" width="3.5000" height="2.0000" fill="#A52A2A" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="46.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end">13</text>
+    <text x="169.6000" y="46.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">Shell2OverhangHatch</text>
+    <rect x="161.8000" y="48.0000" width="3.5000" height="2.0000" fill="#808080" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="49.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end">14</text>
+    <text x="169.6000" y="49.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">Shell2NormalHatch</text>
+    <rect x="161.8000" y="51.0000" width="3.5000" height="2.0000" fill="#32CD32" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="52.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end">15</text>
+    <text x="169.6000" y="52.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">Shell2ContourHatch</text>
+    <rect x="161.8000" y="54.0000" width="3.5000" height="2.0000" fill="#1A237E" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="55.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end">16</text>
+    <text x="169.6000" y="55.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">SupportContourVolume</text>
+    <rect x="161.8000" y="57.0000" width="3.5000" height="2.0000" fill="#827717" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="58.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end">17</text>
+    <text x="169.6000" y="58.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">SupportHatch</text>
+    <rect x="161.8000" y="60.0000" width="3.5000" height="2.0000" fill="#006064" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="61.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end">18</text>
+    <text x="169.6000" y="61.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">PointSequence</text>
+    <rect x="161.8000" y="63.0000" width="3.5000" height="2.0000" fill="#B71C1C" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="64.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end">19</text>
+    <text x="169.6000" y="64.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">ExternalSupports</text>
+    <rect x="161.8000" y="66.0000" width="3.5000" height="2.0000" fill="#E64A19" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="67.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end">20</text>
+    <text x="169.6000" y="67.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">CoreContourHatchOverhang</text>
+    <rect x="161.8000" y="69.0000" width="3.5000" height="2.0000" fill="#311B92" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="70.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end">21</text>
+    <text x="169.6000" y="70.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">Shell1ContourHatchOverhang</text>
+    <rect x="161.8000" y="72.0000" width="3.5000" height="2.0000" fill="#880E4F" stroke="#333333" stroke-width="0.08" rx="0.3" ry="0.3"/>
+    <text x="168.6000" y="73.9000" font-family="monospace" font-size="1.6000" fill="#444444" text-anchor="end">22</text>
+    <text x="169.6000" y="73.9000" font-family="sans-serif" font-size="1.6000" fill="#111111">Shell2ContourHatchOverhang</text>
+    </g>
+  </g>
+</svg>

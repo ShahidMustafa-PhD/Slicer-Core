@@ -1,0 +1,329 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="2020.0000mm" height="1600.0000mm"
+     viewBox="0 0 202.000000 160.000000">
+  <!--
+    Build plate : 150.00 x 150.00 mm
+    Coordinate  : 1 SVG unit = 1 mm
+    Display zoom: 10x  (width/height = viewBox x 10)
+    Hatch stroke: 0.04 mm = ~28 mm on screen at this zoom
+    Legend panel: right margin (42 mm wide)
+  -->
+  <defs>
+    <marker id="endArrow" markerWidth="2" markerHeight="1.4"
+            refX="0" refY="0.7" orient="auto"
+            markerUnits="strokeWidth">
+      <polyline fill="darkblue" points="0,0 2,0.7 0,1.4 0.2,0.7"/>
+    </marker>
+  </defs>
+  <!-- Background -->
+  <rect x="0" y="0" width="202.000000" height="160.000000" fill="#f0f0f0" stroke="none"/>
+  <!-- Build plate boundary (150 x 150 mm) -->
+  <rect x="5.000000" y="5.000000" width="150.000000" height="150.000000"
+        fill="#ffffff" stroke="#aaaaaa" stroke-width="0.2" stroke-dasharray="1,0.5"/>
+  <!-- Build plate centre circle (r = 75.00 mm) -->
+  <circle cx="80.000000" cy="80.000000" r="75.000000"
+          fill="none" stroke="#bbbbbb" stroke-width="0.15" stroke-dasharray="0.8,0.4"/>
+  <!-- Centre cross-hair -->
+  <line x1="5.000000" y1="80.000000" x2="155.000000" y2="80.000000" stroke="#cccccc" stroke-width="0.1"/>
+  <line x1="80.000000" y1="5.000000" x2="80.000000" y2="155.000000" stroke="#cccccc" stroke-width="0.1"/>
+  <circle cx="80.000000" cy="80.000000" r="0.3" fill="#cccccc" stroke="none"/>
+  <!-- Corner labels -->
+  <text x="5.400000" y="4.600000" font-family="sans-serif" font-size="2" fill="#888888">0,0</text>
+  <text x="154.600006" y="4.600000" font-family="sans-serif" font-size="2" fill="#888888" text-anchor="end">150,0</text>
+  <text x="5.400000" y="157.199997" font-family="sans-serif" font-size="2" fill="#888888">0,150</text>
+  <!-- Layer geometry -->
+  <g id="geometry">
+    <line x1="34.43518" y1="124.77564" x2="34.57601" y2="124.75333" stroke="green" stroke-width="0.04000"/>
+    <line x1="34.11444" y1="124.72520" x2="34.61829" y2="124.64539" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.79370" y1="124.67475" x2="34.66058" y2="124.53745" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.63295" y1="124.59897" x2="34.70286" y2="124.42950" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.59976" y1="124.50298" x2="34.74515" y2="124.32156" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.56657" y1="124.40698" x2="34.78743" y2="124.21362" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.53338" y1="124.31099" x2="34.82844" y2="124.10587" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.50019" y1="124.21500" x2="34.86776" y2="123.99841" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.46700" y1="124.11902" x2="34.90709" y2="123.89093" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.43382" y1="124.02303" x2="34.94641" y2="123.78345" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.40062" y1="123.92703" x2="34.96194" y2="123.67975" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.36743" y1="123.83104" x2="34.97414" y2="123.57657" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.33015" y1="123.73570" x2="34.98633" y2="123.47339" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.28578" y1="123.64149" x2="34.99853" y2="123.37021" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.24142" y1="123.54726" x2="35.01073" y2="123.26704" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.19705" y1="123.45305" x2="35.02292" y2="123.16386" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.15269" y1="123.35883" x2="35.03477" y2="123.06073" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.10944" y1="123.26443" x2="35.04624" y2="122.95766" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.08231" y1="123.16748" x2="35.05772" y2="122.85461" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.05518" y1="123.07053" x2="35.06919" y2="122.75154" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.02805" y1="122.97358" x2="35.08409" y2="122.64793" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.00375" y1="122.87618" x2="35.09909" y2="122.54431" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.98299" y1="122.77822" x2="35.11408" y2="122.44069" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.96223" y1="122.68026" x2="35.12908" y2="122.33707" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.94148" y1="122.58231" x2="35.14408" y2="122.23344" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.92072" y1="122.48434" x2="35.15908" y2="122.12982" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.89996" y1="122.38639" x2="35.17407" y2="122.02621" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.87805" y1="122.28861" x2="35.19540" y2="121.92158" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.85388" y1="122.19119" x2="35.21737" y2="121.81686" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.83176" y1="122.09344" x2="35.23933" y2="121.71213" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.81477" y1="121.99490" x2="35.26099" y2="121.60745" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.79777" y1="121.89634" x2="35.28158" y2="121.50294" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.77750" y1="121.79831" x2="35.30218" y2="121.39844" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.75674" y1="121.70035" x2="35.32278" y2="121.29392" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.73598" y1="121.60239" x2="35.34337" y2="121.18941" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.71523" y1="121.50443" x2="35.36397" y2="121.08491" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.69447" y1="121.40647" x2="35.38456" y2="120.98040" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.67371" y1="121.30851" x2="35.40516" y2="120.87589" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.65314" y1="121.21053" x2="35.42989" y2="120.77073" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.63282" y1="121.11250" x2="35.45571" y2="120.66539" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.61320" y1="121.01435" x2="35.48153" y2="120.56006" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.59820" y1="120.91548" x2="35.50782" y2="120.45464" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.58320" y1="120.81661" x2="35.53585" y2="120.34896" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.56819" y1="120.71775" x2="35.56387" y2="120.24328" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.55318" y1="120.61887" x2="35.59190" y2="120.13759" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.53818" y1="120.52000" x2="35.61993" y2="120.03191" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.52317" y1="120.42113" x2="35.64795" y2="119.92622" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.50817" y1="120.32227" x2="35.66996" y2="119.82149" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.49249" y1="120.22350" x2="35.68372" y2="119.71806" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.47537" y1="120.12497" x2="35.69748" y2="119.61464" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.45821" y1="120.02644" x2="35.71124" y2="119.51121" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.44105" y1="119.92791" x2="35.72507" y2="119.40777" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.42388" y1="119.82938" x2="35.73895" y2="119.30432" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.40672" y1="119.73085" x2="35.75283" y2="119.20088" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.38956" y1="119.63232" x2="35.76584" y2="119.09757" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.37240" y1="119.53380" x2="35.77620" y2="118.99469" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.35524" y1="119.43527" x2="35.78656" y2="118.89180" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.33879" y1="119.33662" x2="35.79693" y2="118.78891" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.32389" y1="119.23774" x2="35.80729" y2="118.68602" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.30899" y1="119.13885" x2="35.81765" y2="118.58314" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.29410" y1="119.03996" x2="35.82802" y2="118.48025" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.27868" y1="118.94116" x2="35.84070" y2="118.37699" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.26069" y1="118.84277" x2="35.85561" y2="118.27338" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.24270" y1="118.74437" x2="35.87051" y2="118.16978" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.22472" y1="118.64597" x2="35.88541" y2="118.06617" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.20673" y1="118.54757" x2="35.90032" y2="117.96256" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.18874" y1="118.44917" x2="35.91523" y2="117.85896" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.17561" y1="118.35001" x2="35.92178" y2="117.75668" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.16338" y1="118.25069" x2="35.92723" y2="117.65456" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.15116" y1="118.15138" x2="35.93268" y2="117.55245" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.13894" y1="118.05207" x2="35.93813" y2="117.45034" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.12672" y1="117.95277" x2="35.94318" y2="117.34830" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.11449" y1="117.85345" x2="35.94820" y2="117.24625" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.10227" y1="117.75414" x2="35.95322" y2="117.14421" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.09005" y1="117.65483" x2="35.95824" y2="117.04217" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.07732" y1="117.55560" x2="35.96326" y2="116.94012" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.06284" y1="117.45665" x2="35.96665" y2="116.83834" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.05305" y1="117.35696" x2="35.96982" y2="116.73660" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.04201" y1="117.25746" x2="35.97299" y2="116.63485" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.02089" y1="117.15955" x2="35.97617" y2="116.53310" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.99977" y1="117.06165" x2="35.97927" y2="116.43136" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.97865" y1="116.96375" x2="35.98192" y2="116.32970" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.95753" y1="116.86585" x2="35.98456" y2="116.22803" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.93641" y1="116.76794" x2="35.98721" y2="116.12637" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.91529" y1="116.67005" x2="35.98985" y2="116.02470" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.88899" y1="116.57297" x2="35.98792" y2="115.92376" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.86003" y1="116.47630" x2="35.98219" y2="115.82342" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.83108" y1="116.37965" x2="35.97646" y2="115.72308" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.80702" y1="116.28221" x2="35.97073" y2="115.62274" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.78583" y1="116.18432" x2="35.96501" y2="115.52240" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.76463" y1="116.08643" x2="35.95928" y2="115.42207" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.74344" y1="115.98854" x2="35.95402" y2="115.32165" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.72224" y1="115.89065" x2="35.94895" y2="115.22121" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.70105" y1="115.79276" x2="35.94389" y2="115.12076" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.67986" y1="115.69487" x2="35.93882" y2="115.02032" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.64843" y1="115.59860" x2="35.93366" y2="114.91988" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.61673" y1="115.50238" x2="35.92743" y2="114.81963" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.58503" y1="115.40615" x2="35.92119" y2="114.71937" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.55333" y1="115.30992" x2="35.91496" y2="114.61911" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.52164" y1="115.21369" x2="35.90873" y2="114.51884" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.48994" y1="115.11747" x2="35.90149" y2="114.41875" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.46330" y1="115.02045" x2="35.89350" y2="114.31877" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.43802" y1="114.92320" x2="35.88551" y2="114.21879" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.41275" y1="114.82596" x2="35.87753" y2="114.11880" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.38290" y1="114.72944" x2="35.86954" y2="114.01882" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.35199" y1="114.63309" x2="35.85799" y2="113.91940" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.32107" y1="114.53674" x2="35.83837" y2="113.82127" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.29015" y1="114.44039" x2="35.81876" y2="113.72313" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.25923" y1="114.34404" x2="35.79914" y2="113.62499" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.22530" y1="114.24817" x2="35.77953" y2="113.52685" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.18565" y1="114.15320" x2="35.75756" y2="113.42908" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.14601" y1="114.05823" x2="35.73225" y2="113.33184" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.10942" y1="113.96278" x2="35.70695" y2="113.23460" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.10134" y1="113.86282" x2="35.68599" y2="113.13668" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.08238" y1="113.76457" x2="35.66822" y2="113.03825" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.05733" y1="113.66729" x2="35.65044" y2="112.93981" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.03226" y1="113.57001" x2="35.63267" y2="112.84138" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.00721" y1="113.47274" x2="35.61490" y2="112.74295" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.98215" y1="113.37546" x2="35.59712" y2="112.64452" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.95709" y1="113.27818" x2="35.57935" y2="112.54609" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.93203" y1="113.18091" x2="35.55311" y2="112.44900" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.91176" y1="113.08287" x2="35.52272" y2="112.35256" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.90941" y1="112.98199" x2="35.49233" y2="112.25613" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.90706" y1="112.88112" x2="35.46194" y2="112.15970" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.90471" y1="112.78024" x2="35.43156" y2="112.06326" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.90235" y1="112.67937" x2="35.40117" y2="111.96684" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.89606" y1="112.57912" x2="35.37078" y2="111.87040" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.88044" y1="112.48035" x2="35.34471" y2="111.77328" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.86482" y1="112.38158" x2="35.31920" y2="111.67607" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.84920" y1="112.28281" x2="35.29369" y2="111.57887" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.83978" y1="112.18305" x2="35.26738" y2="111.48179" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.86189" y1="112.07831" x2="35.23368" y2="111.38588" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.88400" y1="111.97356" x2="35.19998" y2="111.28997" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.90611" y1="111.86880" x2="35.16628" y2="111.19406" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.92823" y1="111.76405" x2="35.13258" y2="111.09815" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.94053" y1="111.66087" x2="35.09888" y2="111.00224" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.94059" y1="111.55960" x2="35.06519" y2="110.90633" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.94064" y1="111.45835" x2="35.03149" y2="110.81042" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.94070" y1="111.35709" x2="34.99779" y2="110.71452" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.94076" y1="111.25584" x2="34.96322" y2="110.61874" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.94081" y1="111.15458" x2="34.92522" y2="110.52351" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.94087" y1="111.05333" x2="34.88242" y2="110.42905" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.95886" y1="110.94923" x2="34.84143" y2="110.33429" stroke="green" stroke-width="0.04000"/>
+    <line x1="30.98713" y1="110.84351" x2="34.80045" y2="110.23954" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.01539" y1="110.73779" x2="34.75947" y2="110.14478" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.03728" y1="110.63307" x2="34.71848" y2="110.05003" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.05896" y1="110.52839" x2="34.67750" y2="109.95527" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.08065" y1="110.42371" x2="34.63652" y2="109.86052" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.10234" y1="110.31902" x2="34.59554" y2="109.76576" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.12403" y1="110.21435" x2="34.55456" y2="109.67101" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.14662" y1="110.10952" x2="34.51357" y2="109.57625" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.17123" y1="110.00438" x2="34.46763" y2="109.48228" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.19583" y1="109.89924" x2="34.41718" y2="109.38902" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.22044" y1="109.79409" x2="34.36674" y2="109.29577" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.23548" y1="109.69046" x2="34.31629" y2="109.20251" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.24187" y1="109.58820" x2="34.27028" y2="109.10855" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.25740" y1="109.48450" x2="34.23883" y2="109.01228" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.30874" y1="109.37511" x2="34.20737" y2="108.91602" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.36009" y1="109.26574" x2="34.17593" y2="108.81976" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.41143" y1="109.15636" x2="34.14447" y2="108.72349" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.46277" y1="109.04698" x2="34.11302" y2="108.62723" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.51412" y1="108.93761" x2="34.08137" y2="108.53099" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.56547" y1="108.82822" x2="34.02693" y2="108.43837" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.58738" y1="108.72350" x2="33.97249" y2="108.34574" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.60159" y1="108.62001" x2="33.91805" y2="108.25312" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.61581" y1="108.51651" x2="33.86361" y2="108.16049" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.63002" y1="108.41302" x2="33.80917" y2="108.06787" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.64424" y1="108.30952" x2="33.75473" y2="107.97525" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.70255" y1="108.19904" x2="33.70246" y2="107.88228" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.78691" y1="108.08443" x2="33.67994" y2="107.78460" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.87127" y1="107.96982" x2="33.65741" y2="107.68692" stroke="green" stroke-width="0.04000"/>
+    <line x1="31.95563" y1="107.85521" x2="33.63489" y2="107.58924" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.00706" y1="107.74582" x2="33.61079" y2="107.49181" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.03520" y1="107.64011" x2="33.53459" y2="107.40263" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.06334" y1="107.53441" x2="33.45839" y2="107.31345" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.09148" y1="107.42870" x2="33.38218" y2="107.22428" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.11963" y1="107.32301" x2="33.30598" y2="107.13510" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.25117" y1="107.20092" x2="33.22978" y2="107.04592" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.43787" y1="107.07011" x2="33.15358" y2="106.95675" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.62458" y1="106.93929" x2="33.07738" y2="106.86757" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.81129" y1="106.80847" x2="33.00803" y2="106.77731" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.85722" y1="106.69994" x2="32.99713" y2="106.67779" stroke="green" stroke-width="0.04000"/>
+    <line x1="45.04980" y1="110.93922" x2="46.35041" y2="110.73323" stroke="green" stroke-width="0.04000"/>
+    <line x1="44.57716" y1="110.91284" x2="46.73611" y2="110.57089" stroke="green" stroke-width="0.04000"/>
+    <line x1="44.17456" y1="110.87536" x2="47.11032" y2="110.41038" stroke="green" stroke-width="0.04000"/>
+    <line x1="43.75815" y1="110.84007" x2="47.26461" y2="110.28470" stroke="green" stroke-width="0.04000"/>
+    <line x1="43.38843" y1="110.79738" x2="47.41891" y2="110.15901" stroke="green" stroke-width="0.04000"/>
+    <line x1="43.13596" y1="110.73612" x2="47.57322" y2="110.03333" stroke="green" stroke-width="0.04000"/>
+    <line x1="42.92001" y1="110.66908" x2="47.73602" y2="109.90630" stroke="green" stroke-width="0.04000"/>
+    <line x1="42.70407" y1="110.60203" x2="47.81196" y2="109.79301" stroke="green" stroke-width="0.04000"/>
+    <line x1="42.49688" y1="110.53360" x2="47.87490" y2="109.68180" stroke="green" stroke-width="0.04000"/>
+    <line x1="42.31599" y1="110.46101" x2="47.93784" y2="109.57059" stroke="green" stroke-width="0.04000"/>
+    <line x1="42.13508" y1="110.38841" x2="48.00078" y2="109.45937" stroke="green" stroke-width="0.04000"/>
+    <line x1="41.95418" y1="110.31582" x2="48.06372" y2="109.34816" stroke="green" stroke-width="0.04000"/>
+    <line x1="41.77106" y1="110.24357" x2="48.12666" y2="109.23694" stroke="green" stroke-width="0.04000"/>
+    <line x1="41.58636" y1="110.17158" x2="48.13826" y2="109.13386" stroke="green" stroke-width="0.04000"/>
+    <line x1="41.39965" y1="110.09990" x2="48.07702" y2="109.04231" stroke="green" stroke-width="0.04000"/>
+    <line x1="41.22731" y1="110.02596" x2="47.99596" y2="108.95391" stroke="green" stroke-width="0.04000"/>
+    <line x1="41.07253" y1="109.94923" x2="47.89888" y2="108.86803" stroke="green" stroke-width="0.04000"/>
+    <line x1="40.91776" y1="109.87249" x2="47.79962" y2="108.78251" stroke="green" stroke-width="0.04000"/>
+    <line x1="40.76299" y1="109.79575" x2="47.67138" y2="108.70158" stroke="green" stroke-width="0.04000"/>
+    <line x1="40.60822" y1="109.71902" x2="47.54313" y2="108.62064" stroke="green" stroke-width="0.04000"/>
+    <line x1="40.44618" y1="109.64344" x2="47.41489" y2="108.53970" stroke="green" stroke-width="0.04000"/>
+    <line x1="40.27911" y1="109.56866" x2="47.32356" y2="108.45293" stroke="green" stroke-width="0.04000"/>
+    <line x1="40.11929" y1="109.49272" x2="47.26609" y2="108.36078" stroke="green" stroke-width="0.04000"/>
+    <line x1="40.00146" y1="109.41014" x2="47.20861" y2="108.26864" stroke="green" stroke-width="0.04000"/>
+    <line x1="39.88363" y1="109.32755" x2="47.10339" y2="108.18405" stroke="green" stroke-width="0.04000"/>
+    <line x1="39.76580" y1="109.24496" x2="46.98667" y2="108.10130" stroke="green" stroke-width="0.04000"/>
+    <line x1="39.64797" y1="109.16238" x2="46.86996" y2="108.01853" stroke="green" stroke-width="0.04000"/>
+    <line x1="39.51435" y1="109.08231" x2="46.75324" y2="107.93578" stroke="green" stroke-width="0.04000"/>
+    <line x1="39.37501" y1="109.00313" x2="46.63980" y2="107.85249" stroke="green" stroke-width="0.04000"/>
+    <line x1="39.24150" y1="108.92302" x2="46.52961" y2="107.76870" stroke="green" stroke-width="0.04000"/>
+    <line x1="39.12900" y1="108.83959" x2="46.41942" y2="107.68491" stroke="green" stroke-width="0.04000"/>
+    <line x1="39.01650" y1="108.75616" x2="46.30923" y2="107.60111" stroke="green" stroke-width="0.04000"/>
+    <line x1="38.90400" y1="108.67274" x2="46.19905" y2="107.51732" stroke="green" stroke-width="0.04000"/>
+    <line x1="38.79150" y1="108.58932" x2="46.09191" y2="107.43304" stroke="green" stroke-width="0.04000"/>
+    <line x1="38.67900" y1="108.50588" x2="45.98529" y2="107.34868" stroke="green" stroke-width="0.04000"/>
+    <line x1="38.56461" y1="108.42275" x2="45.87838" y2="107.26437" stroke="green" stroke-width="0.04000"/>
+    <line x1="38.44606" y1="108.34028" x2="45.77133" y2="107.18008" stroke="green" stroke-width="0.04000"/>
+    <line x1="38.35148" y1="108.25401" x2="45.66427" y2="107.09578" stroke="green" stroke-width="0.04000"/>
+    <line x1="38.25690" y1="108.16776" x2="45.55480" y2="107.01188" stroke="green" stroke-width="0.04000"/>
+    <line x1="38.16232" y1="108.08149" x2="45.42061" y2="106.93188" stroke="green" stroke-width="0.04000"/>
+    <line x1="38.06774" y1="107.99522" x2="45.28642" y2="106.85189" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.97316" y1="107.90895" x2="45.15222" y2="106.77190" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.87857" y1="107.82269" x2="45.02747" y2="106.69041" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.78344" y1="107.73650" x2="44.89957" y2="106.60942" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.66557" y1="107.65393" x2="44.76946" y2="106.52879" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.59626" y1="107.56366" x2="44.63934" y2="106.44815" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.52711" y1="107.47337" x2="44.50922" y2="106.36751" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.45797" y1="107.38307" x2="44.37910" y2="106.28687" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.38882" y1="107.29278" x2="44.21421" y2="106.21174" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.31967" y1="107.20248" x2="44.04193" y2="106.13778" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.25053" y1="107.11219" x2="43.86967" y2="106.06382" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.18138" y1="107.02190" x2="43.72981" y2="105.98473" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.10990" y1="106.93197" x2="43.59563" y2="105.90473" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.03566" y1="106.84248" x2="43.46144" y2="105.82474" stroke="green" stroke-width="0.04000"/>
+    <line x1="36.96141" y1="106.75299" x2="43.10751" y2="105.77954" stroke="green" stroke-width="0.04000"/>
+    <line x1="36.88716" y1="106.66351" x2="42.81900" y2="105.72399" stroke="green" stroke-width="0.04000"/>
+    <line x1="36.83793" y1="106.57006" x2="42.68351" y2="105.64421" stroke="green" stroke-width="0.04000"/>
+    <line x1="36.81511" y1="106.47243" x2="42.54802" y2="105.56442" stroke="green" stroke-width="0.04000"/>
+    <line x1="36.79229" y1="106.37479" x2="42.39596" y2="105.48726" stroke="green" stroke-width="0.04000"/>
+    <line x1="36.76947" y1="106.27716" x2="42.23649" y2="105.41127" stroke="green" stroke-width="0.04000"/>
+    <line x1="36.74665" y1="106.17953" x2="42.07702" y2="105.33527" stroke="green" stroke-width="0.04000"/>
+    <line x1="36.72382" y1="106.08189" x2="41.91756" y2="105.25929" stroke="green" stroke-width="0.04000"/>
+    <line x1="36.69881" y1="105.98461" x2="41.75809" y2="105.18330" stroke="green" stroke-width="0.04000"/>
+    <line x1="36.67374" y1="105.88734" x2="41.59284" y2="105.10823" stroke="green" stroke-width="0.04000"/>
+    <line x1="36.64866" y1="105.79006" x2="41.46003" y2="105.02802" stroke="green" stroke-width="0.04000"/>
+    <line x1="36.62358" y1="105.69279" x2="41.32954" y2="104.94743" stroke="green" stroke-width="0.04000"/>
+    <line x1="36.59851" y1="105.59551" x2="41.19905" y2="104.86686" stroke="green" stroke-width="0.04000"/>
+    <line x1="36.63338" y1="105.48874" x2="41.06917" y2="104.78618" stroke="green" stroke-width="0.04000"/>
+    <line x1="36.68931" y1="105.37864" x2="40.94524" y2="104.70457" stroke="green" stroke-width="0.04000"/>
+    <line x1="36.74525" y1="105.26853" x2="40.82130" y2="104.62295" stroke="green" stroke-width="0.04000"/>
+    <line x1="36.80119" y1="105.15842" x2="40.69736" y2="104.54133" stroke="green" stroke-width="0.04000"/>
+    <line x1="36.85712" y1="105.04832" x2="40.53008" y2="104.46658" stroke="green" stroke-width="0.04000"/>
+    <line x1="36.91306" y1="104.93821" x2="40.35561" y2="104.39296" stroke="green" stroke-width="0.04000"/>
+    <line x1="36.96900" y1="104.82811" x2="40.18355" y2="104.31898" stroke="green" stroke-width="0.04000"/>
+    <line x1="36.95480" y1="104.72911" x2="40.01147" y2="104.24498" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.00378" y1="104.62010" x2="39.83939" y2="104.17099" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.03575" y1="104.51379" x2="39.61184" y2="104.10578" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.05857" y1="104.40893" x2="39.35084" y2="104.04588" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.08141" y1="104.30407" x2="39.17286" y2="103.97282" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.10423" y1="104.19921" x2="39.00005" y2="103.89894" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.12706" y1="104.09435" x2="38.81760" y2="103.82659" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.14989" y1="103.98949" x2="38.62145" y2="103.75642" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.17272" y1="103.88462" x2="37.95837" y2="103.76019" stroke="green" stroke-width="0.04000"/>
+    <line x1="37.97488" y1="103.75757" x2="38.42530" y2="103.68623" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.10952" y1="102.92467" x2="33.14816" y2="102.91856" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.03535" y1="102.83517" x2="33.35984" y2="102.78378" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.96119" y1="102.74567" x2="33.74700" y2="102.62122" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.90575" y1="102.65321" x2="33.99036" y2="102.48142" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.88979" y1="102.55449" x2="34.12560" y2="102.35876" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.87381" y1="102.45577" x2="34.29702" y2="102.23036" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.85784" y1="102.35706" x2="34.46844" y2="102.10196" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.84187" y1="102.25834" x2="34.60014" y2="101.97986" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.82590" y1="102.15962" x2="34.71840" y2="101.85988" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.80993" y1="102.06091" x2="34.86765" y2="101.73500" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.79396" y1="101.96219" x2="34.85438" y2="101.63585" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.77798" y1="101.86347" x2="34.84351" y2="101.53632" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.77386" y1="101.76288" x2="34.83277" y2="101.43678" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.78886" y1="101.65926" x2="34.82203" y2="101.33723" stroke="green" stroke-width="0.04000"/>
+    <line x1="32.91373" y1="101.53823" x2="34.81128" y2="101.23769" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.03860" y1="101.41721" x2="34.80054" y2="101.13815" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.16347" y1="101.29619" x2="34.78979" y2="101.03860" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.28835" y1="101.17516" x2="34.77905" y2="100.93906" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.41322" y1="101.05414" x2="34.74789" y2="100.84274" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.68839" y1="100.90931" x2="34.62151" y2="100.76151" stroke="green" stroke-width="0.04000"/>
+    <line x1="33.98587" y1="100.76094" x2="34.47272" y2="100.68383" stroke="green" stroke-width="0.04000"/>
+    <path d="M 32.9958 106.666 L 33.0092 106.788 L 33.613 107.494 L 33.704 107.889 L 34.0818 108.532 L 34.2776 109.131 L 34.4941 109.531 L 34.8948 110.458 L 34.9201 110.511 L 34.9709 110.638 L 35.2707 111.491 L 35.3673 111.859 L 35.5735 112.514 L 35.6963 113.194 L 35.768 113.469 L 35.864 113.949 L 35.9061 114.476 L 35.9342 114.928 L 35.9576 115.392 L 35.991 115.979 L 35.9789 116.444 L 35.9638 116.928 L 35.9384 117.445 L 35.917 117.847 L 35.8331 118.43 L 35.7632 119.123 L 35.7209 119.438 L 35.7209 119.439 L 35.6642 119.865 L 35.5018 120.477 L 35.4095 120.854 L 35.2563 121.631 L 35.1754 122.017 L 35.0695 122.749 L 35.0292 123.111 L 34.9512 123.77 L 34.8115 124.152 L 34.5596 124.795 L 33.7576 124.669 L 33.651 124.651 L 33.3464 123.77 L 33.1112 123.271 L 33.013 122.92 L 32.8863 122.322 L 32.8366 122.122 L 32.7956 121.883 L 32.6615 121.251 L 32.6152 121.028 L 32.499 120.262 L 32.4909 120.214 L 32.3435 119.368 L 32.2817 118.958 L 32.1859 118.434 L 32.0799 117.572 L 32.0644 117.472 L 32.0443 117.268 L 31.9082 116.637 L 31.8204 116.344 L 31.6793 115.692 L 31.4832 115.097 L 31.408 114.807 L 31.239 114.281 L 31.1102 113.972 L 31.0984 113.827 L 30.9123 113.104 L 30.9007 112.608 L 30.8361 112.2 L 30.9405 111.706 L 30.9409 111.016 L 31.0162 110.735 L 31.139 110.142 L 31.2321 109.744 L 31.247 109.507 L 31.5761 108.806 L 31.6495 108.271 L 31.9906 107.808 L 32.1294 107.286 L 32.8499 106.781 L 32.8615 106.653 L 32.9958 106.666" fill="none" stroke="blue" stroke-width="0.04000" fill-rule="evenodd" fill-opacity="1.000"/>
+    <path d="M 38.8986 103.856 L 39.3355 104.042 L 39.7747 104.143 L 40.5158 104.462 L 40.6385 104.503 L 41.0807 104.794 L 41.5821 105.103 L 41.7315 105.171 L 42.5061 105.54 L 42.8644 105.751 L 43.4547 105.821 L 43.844 106.053 L 44.3563 106.273 L 44.9802 106.659 L 45.1458 106.768 L 45.5668 107.019 L 45.9508 107.321 L 46.1828 107.505 L 46.6951 107.895 L 47.1975 108.251 L 47.3535 108.501 L 47.8086 108.788 L 48.0497 109.001 L 48.1636 109.172 L 47.7629 109.88 L 47.7249 109.917 L 47.6783 109.948 L 47.0997 110.419 L 46.6454 110.609 L 46.0224 110.872 L 45.7903 110.899 L 45.6313 110.905 L 44.8449 110.951 L 44.534 110.907 L 43.8031 110.843 L 43.5285 110.825 L 43.2388 110.768 L 42.542 110.552 L 41.8788 110.286 L 41.4963 110.136 L 41.3017 110.063 L 40.5449 109.688 L 40.1367 109.505 L 39.6166 109.14 L 39.266 108.941 L 38.5835 108.435 L 38.466 108.358 L 37.7862 107.738 L 37.6652 107.654 L 37.1437 106.973 L 36.849 106.618 L 36.7232 106.079 L 36.592 105.57 L 36.982 104.803 L 36.952 104.721 L 37.0191 104.59 L 37.191 103.801 L 37.9632 103.76 L 38.3903 103.674 L 38.8986 103.856" fill="none" stroke="blue" stroke-width="0.04000" fill-rule="evenodd" fill-opacity="1.000"/>
+    <path d="M 34.5128 100.692 L 34.7702 100.857 L 34.8537 101.631 L 34.8736 101.78 L 34.7682 101.809 L 34.5118 102.069 L 34.1116 102.369 L 33.916 102.55 L 33.3279 102.797 L 33.1201 102.937 L 32.9109 102.685 L 32.7776 101.861 L 32.7706 101.677 L 33.4293 101.039 L 33.9915 100.758 L 34.357 100.661 L 34.5128 100.692" fill="none" stroke="blue" stroke-width="0.04000" fill-rule="evenodd" fill-opacity="1.000"/>
+  </g>
+</svg>
