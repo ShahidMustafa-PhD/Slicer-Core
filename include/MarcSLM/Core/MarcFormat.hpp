@@ -455,6 +455,38 @@ struct Circle {
 };
 
 // ==============================================================================
+// ExPolygon: Contour with Holes (for hole-aware hatching)
+// ==============================================================================
+
+/// @brief A closed contour with zero or more interior holes.
+/// @details Preserves the contour-hole association from the slicer so that
+///          hatch generators can subtract holes from scan vectors.
+///          This mirrors the Legacy Slic3r ExPolygon concept and PySLM's
+///          slice representation.
+///
+///          Convention:
+///          - contour:  outer boundary (CCW winding)
+///          - holes:    interior voids (CW winding each)
+///          - Hatches fill the region: contour MINUS union(holes)
+struct ExPolygon {
+    Polygon              contour;   ///< Outer boundary polygon.
+    std::vector<Polygon> holes;     ///< Interior holes (voids, islands).
+    GeometryTag          tag;       ///< Metadata for the contour.
+
+    /// @brief Default constructor.
+    ExPolygon() noexcept = default;
+
+    /// @brief True when the contour is valid (? 3 points).
+    [[nodiscard]] bool isValid() const noexcept { return contour.isValid(); }
+
+    /// @brief True when at least one hole exists.
+    [[nodiscard]] bool hasHoles() const noexcept { return !holes.empty(); }
+
+    /// @brief Number of holes.
+    [[nodiscard]] size_t holeCount() const noexcept { return holes.size(); }
+};
+
+// ==============================================================================
 // Slice — Clean-Room ExPolygon Replacement
 // ==============================================================================
 
@@ -536,13 +568,8 @@ struct Slice {
 // ==============================================================================
 
 /// @brief All geometry for a single printed layer.
-/// @details Aggregates Hatch, Polyline, Polygon, and Circle collections
-///          together with the layer's physical metadata (number, height,
-///          thickness).
-///
-/// @par Thread safety
-/// Thread-safe for concurrent *reads*.  External synchronisation is
-/// required for concurrent writes.
+/// @details Aggregates Hatch, Polyline, Polygon, Circle, and ExPolygon
+///          collections together with the layer's physical metadata.
 struct Layer {
     // ---- metadata ----------------------------------------------------------
     uint32_t layerNumber;     ///< 0-based index from the build plate upward.
@@ -550,44 +577,40 @@ struct Layer {
     float    layerThickness;  ///< Incremental layer thickness [mm] (20–100 µm typical).
 
     // ---- geometry collections ----------------------------------------------
-    std::vector<Hatch>    hatches;    ///< Infill hatch groups.
-    std::vector<Polyline> polylines;  ///< Open contour / perimeter paths.
-    std::vector<Polygon>  polygons;   ///< Closed filled regions.
-    std::vector<Circle>   circles;    ///< Arcs / circles (rarely used).
+    std::vector<Hatch>     hatches;     ///< Infill hatch groups.
+    std::vector<Polyline>  polylines;   ///< Open contour / perimeter paths.
+    std::vector<Polygon>   polygons;    ///< Closed filled regions.
+    std::vector<Circle>    circles;     ///< Arcs / circles (rarely used).
+    std::vector<ExPolygon> exPolygons;  ///< Contours with holes (for hole-aware hatching).
 
     // ---- constructors ------------------------------------------------------
 
-    /// @brief Default constructor — layer 0 at Z = 0 mm.
     Layer() noexcept
         : layerNumber(0), layerHeight(0.0f), layerThickness(0.0f) {}
 
-    /// @brief Construct with explicit metadata.
     explicit Layer(uint32_t number, float height, float thickness) noexcept
         : layerNumber(number), layerHeight(height), layerThickness(thickness) {}
 
     // ---- capacity helpers --------------------------------------------------
 
-    /// @brief Reserve storage for hatch groups.
-    void reserveHatches(size_t n)   { hatches.reserve(n);   }
-    /// @brief Reserve storage for polylines.
-    void reservePolylines(size_t n) { polylines.reserve(n); }
-    /// @brief Reserve storage for polygons.
-    void reservePolygons(size_t n)  { polygons.reserve(n);  }
-    /// @brief Reserve storage for circles.
-    void reserveCircles(size_t n)   { circles.reserve(n);   }
+    void reserveHatches(size_t n)    { hatches.reserve(n);    }
+    void reservePolylines(size_t n)  { polylines.reserve(n);  }
+    void reservePolygons(size_t n)   { polygons.reserve(n);   }
+    void reserveCircles(size_t n)    { circles.reserve(n);    }
+    void reserveExPolygons(size_t n) { exPolygons.reserve(n); }
 
     // ---- query helpers -----------------------------------------------------
 
-    /// @brief True when no geometry of any kind is stored.
     [[nodiscard]] bool isEmpty() const noexcept {
         return hatches.empty() && polylines.empty() &&
-               polygons.empty() && circles.empty();
+               polygons.empty() && circles.empty() &&
+               exPolygons.empty();
     }
 
-    /// @brief Total number of geometry objects across all categories.
     [[nodiscard]] size_t geometryCount() const noexcept {
         return hatches.size() + polylines.size() +
-               polygons.size() + circles.size();
+               polygons.size() + circles.size() +
+               exPolygons.size();
     }
 };
 
