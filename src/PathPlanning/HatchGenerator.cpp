@@ -139,7 +139,7 @@ HatchGenerator::generateIslandHatches(const Clipper2Lib::Path64& contour,
                                        const Clipper2Lib::Paths64& holes) const {
     if (contour.size() < 3) return {};
 
-    // Compute bounding box in mm
+    // Compute bounding box in mm from the contour's Clipper2-unit coordinates.
     double xMin = std::numeric_limits<double>::max();
     double yMin = std::numeric_limits<double>::max();
     double xMax = std::numeric_limits<double>::lowest();
@@ -154,12 +154,21 @@ HatchGenerator::generateIslandHatches(const Clipper2Lib::Path64& contour,
         yMax = std::max(yMax, y);
     }
 
+    // Build the full solid-region clip paths:
+    //   contour (CCW) + holes (CW) — all in Clipper2 integer units.
+    // FillRule::NonZero then correctly classifies the interior minus holes.
+    Clipper2Lib::Paths64 solidRegion;
+    solidRegion.reserve(holes.size() + 1);
+    solidRegion.push_back(contour);
+    for (const auto& hole : holes) {
+        if (hole.size() >= 3) {
+            solidRegion.push_back(hole);
+        }
+    }
+
     std::vector<Marc::Line> allHatches;
 
-    // Generate island grid — each cell gets its own hatch direction
-    // alternating 0°/90° in a checkerboard pattern.
-    // This matches the Legacy FillSLMisland strategy where each island
-    // is hatched independently to reduce residual stress.
+    // Iterate over the island grid.
     int cellRow = 0;
     for (double y = yMin; y < yMax; y += islandHeight_, ++cellRow) {
         int cellCol = 0;
@@ -171,39 +180,46 @@ HatchGenerator::generateIslandHatches(const Clipper2Lib::Path64& contour,
             if (cellXMax - x < hatchSpacing_ || cellYMax - y < hatchSpacing_)
                 continue;
 
-            // Alternate angle between 0° and 90° in checkerboard pattern
+            // Checkerboard hatch angle: 0° / 90° alternating
             double cellAngle = ((cellRow + cellCol) % 2 == 0) ? 0.0 : 90.0;
 
-            // Generate parallel lines for this cell
+            // Build this cell's rectangle in Clipper2 integer units
+            Clipper2Lib::Path64 cellRect = makeRectanglePath(x, y, cellXMax, cellYMax);
+
+            // Intersect cell rectangle with the solid region (contour - holes).
+            // Using NonZero fill rule for correct winding handling.
+            Clipper2Lib::Clipper64 polyClipper;
+            polyClipper.AddSubject({cellRect});
+            polyClipper.AddClip(solidRegion);
+
+            Clipper2Lib::Paths64 cellSolidRegion;
+            polyClipper.Execute(Clipper2Lib::ClipType::Intersection,
+                                Clipper2Lib::FillRule::NonZero,
+                                cellSolidRegion);
+
+            if (cellSolidRegion.empty()) continue;
+
+            // Generate parallel hatch lines covering this cell (in mm)
             auto cellLines = generateParallelLines(
                 x, y, cellXMax, cellYMax,
                 hatchSpacing_, cellAngle);
 
-            // Step 1: Clip to the island rectangle boundary
-            // This ensures hatches don't extend beyond the island cell.
-            // (Legacy FillSLMisland clips each island independently)
-            Clipper2Lib::Path64 cellRect = makeRectanglePath(x, y, cellXMax, cellYMax);
+            // Clip cell lines against the cell's solid region.
+            // cellSolidRegion paths are in Clipper2 integer units from
+            // the Execute above.  clipLinesToPolygon expects pre-scaled
+            // Clipper2 paths for the clip region.
+            //
+            // The output of the Execute above is a flat Paths64 (no PolyTree).
+            // For non-self-intersecting cell regions we can use each path
+            // as the clip boundary directly — but to handle any holes that
+            // were sliced across a cell boundary, we iterate per sub-region.
+            for (const auto& subRegion : cellSolidRegion) {
+                if (subRegion.size() < 3) continue;
 
-            // Step 2: Intersect cell rectangle with the main contour.
-            // Build the combined clip region = intersection of (cell rect, main contour minus holes)
-            Clipper2Lib::Clipper64 polyClipper;
-            Clipper2Lib::Paths64 cellPaths;
-            cellPaths.push_back(cellRect);
-            polyClipper.AddSubject(cellPaths);
-
-            Clipper2Lib::Paths64 clipPoly;
-            clipPoly.push_back(contour);
-            polyClipper.AddClip(clipPoly);
-
-            Clipper2Lib::Paths64 cellContourIntersection;
-            polyClipper.Execute(Clipper2Lib::ClipType::Intersection,
-                                Clipper2Lib::FillRule::EvenOdd,
-                                cellContourIntersection);
-
-            // For each resulting polygon region, clip the cell's hatch lines
-            for (const auto& region : cellContourIntersection) {
-                if (region.size() < 3) continue;
-                auto clipped = clipLinesToPolygon(cellLines, region, holes);
+                // For each sub-region polygon: clip lines against it alone.
+                // Pass empty holes because the cellSolidRegion paths already
+                // had the holes subtracted by the Clipper2 Intersection above.
+                auto clipped = clipLinesToPolygon(cellLines, subRegion, {});
 
                 if (endpointOverlap_ > 0.0) {
                     applyEndpointOverlap(clipped);
@@ -275,32 +291,51 @@ HatchGenerator::clipLinesToPolygon(const std::vector<Marc::Line>& lines,
                                    const Clipper2Lib::Paths64& holes) const {
     std::vector<Marc::Line> result;
 
-    // Build subject (lines) and clip (polygon) for Clipper2
-    // Convert lines to Clipper2 open paths (each line = 2-point path)
-    Clipper2Lib::Paths64 openSubject;
-    openSubject.reserve(lines.size());
+    if (lines.empty() || contour.size() < 3) return result;
 
-    for (const auto& line : lines) {
-        Clipper2Lib::Path64 path;
-        Clipper2Lib::Point64 pa;
-        pa.x = MarcSLM::Core::mmToClipperUnits(static_cast<double>(line.a.x));
-        pa.y = MarcSLM::Core::mmToClipperUnits(static_cast<double>(line.a.y));
-        path.push_back(pa);
-        Clipper2Lib::Point64 pb;
-        pb.x = MarcSLM::Core::mmToClipperUnits(static_cast<double>(line.b.x));
-        pb.y = MarcSLM::Core::mmToClipperUnits(static_cast<double>(line.b.y));
-        path.push_back(pb);
-         openSubject.push_back(std::move(path));
-    }
-
-    // Build clip polygon (contour + holes)
+    // -------------------------------------------------------------------------
+    // Build the clip region: outer contour + hole paths.
+    //
+    // Convention (enforced by PolyTree output in makeExPolygons and by
+    // Clipper2 Union with NonZero fill rule):
+    //   - contour: CCW winding  ? winding contribution = +1
+    //   - holes:   CW  winding  ? winding contribution = -1
+    //
+    // FillRule::NonZero classifies a point as "inside" (filled) when its
+    // accumulated winding number is non-zero.  Therefore:
+    //   - Inside contour only:            winding = +1  ? filled  ?
+    //   - Inside contour AND inside hole: winding = 0   ? void    ?
+    //
+    // This correctly clips hatch lines so they stop at hole boundaries.
+    // -------------------------------------------------------------------------
     Clipper2Lib::Paths64 clipPaths;
+    clipPaths.reserve(holes.size() + 1);
     clipPaths.push_back(contour);
     for (const auto& hole : holes) {
-        clipPaths.push_back(hole);
+        if (hole.size() >= 3) {
+            clipPaths.push_back(hole);
+        }
     }
 
-    // Perform intersection: open paths clipped by closed polygon
+    // Convert hatch lines (in mm) to Clipper2 open subject paths.
+    Clipper2Lib::Paths64 openSubject;
+    openSubject.reserve(lines.size());
+    for (const auto& line : lines) {
+        Clipper2Lib::Path64 path;
+        path.push_back({
+            MarcSLM::Core::mmToClipperUnits(static_cast<double>(line.a.x)),
+            MarcSLM::Core::mmToClipperUnits(static_cast<double>(line.a.y))
+        });
+        path.push_back({
+            MarcSLM::Core::mmToClipperUnits(static_cast<double>(line.b.x)),
+            MarcSLM::Core::mmToClipperUnits(static_cast<double>(line.b.y))
+        });
+        openSubject.push_back(std::move(path));
+    }
+
+    // NOTE: contour and hole paths are already in Clipper2 integer units
+    // (encoded by the caller via mmToClipperUnits before passing here).
+    // No additional scaling is required.
     Clipper2Lib::Clipper64 clipper;
     clipper.AddOpenSubject(openSubject);
     clipper.AddClip(clipPaths);
@@ -308,21 +343,18 @@ HatchGenerator::clipLinesToPolygon(const std::vector<Marc::Line>& lines,
     Clipper2Lib::Paths64 closedSolution;
     Clipper2Lib::Paths64 openSolution;
     clipper.Execute(Clipper2Lib::ClipType::Intersection,
-                    Clipper2Lib::FillRule::EvenOdd,
+                    Clipper2Lib::FillRule::NonZero,
                     closedSolution, openSolution);
 
-    // Convert resulting open paths back to Marc::Line
+    // Convert clipped open paths back to Marc::Line segments.
+    result.reserve(openSolution.size());
     for (const auto& path : openSolution) {
-        if (path.size() >= 2) {
-            // Each clipped segment becomes a line (or multi-segment polyline)
-            for (size_t i = 0; i + 1 < path.size(); ++i) {
-                Marc::Line l;
-                l.a.x = static_cast<float>(MarcSLM::Core::clipperUnitsToMm(path[i].x));
-                l.a.y = static_cast<float>(MarcSLM::Core::clipperUnitsToMm(path[i].y));
-                l.b.x = static_cast<float>(MarcSLM::Core::clipperUnitsToMm(path[i + 1].x));
-                l.b.y = static_cast<float>(MarcSLM::Core::clipperUnitsToMm(path[i + 1].y));
-                result.push_back(l);
-            }
+        for (size_t i = 0; i + 1 < path.size(); ++i) {
+            result.emplace_back(
+                static_cast<float>(MarcSLM::Core::clipperUnitsToMm(path[i].x)),
+                static_cast<float>(MarcSLM::Core::clipperUnitsToMm(path[i].y)),
+                static_cast<float>(MarcSLM::Core::clipperUnitsToMm(path[i + 1].x)),
+                static_cast<float>(MarcSLM::Core::clipperUnitsToMm(path[i + 1].y)));
         }
     }
 
