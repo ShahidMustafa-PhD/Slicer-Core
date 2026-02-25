@@ -328,8 +328,46 @@ LayerSlices MeshProcessor::createLayerFromExPolygons(
 
     if (exPolygons.empty()) return layer;
 
+    layer.reserveExPolygons(exPolygons.size());
+
     for (const auto& exPoly : exPolygons) {
-        // Convert contour to Marc::Polyline (float mm)
+        // ---- Build Marc::ExPolygon (preserves contour-hole association) ----
+        Marc::ExPolygon marcExPoly;
+        marcExPoly.tag.type = Marc::GeometryType::CoreHatch;
+        marcExPoly.tag.buildStyle = Marc::BuildStyleID::CoreHatch_Volume;
+        marcExPoly.tag.layerNumber = layerIndex;
+
+        // Convert contour
+        marcExPoly.contour.tag.type = Marc::GeometryType::Perimeter;
+        marcExPoly.contour.tag.buildStyle = Marc::BuildStyleID::CoreContour_Volume;
+        marcExPoly.contour.tag.layerNumber = layerIndex;
+        marcExPoly.contour.points.reserve(exPoly.contour.size());
+        for (const auto& pt : exPoly.contour) {
+            float x = static_cast<float>(pt.x * MESH_SCALING_FACTOR);
+            float y = static_cast<float>(pt.y * MESH_SCALING_FACTOR);
+            marcExPoly.contour.points.emplace_back(x, y);
+        }
+
+        // Convert holes
+        marcExPoly.holes.reserve(exPoly.holes.size());
+        for (const auto& hole : exPoly.holes) {
+            Marc::Polygon holePolygon;
+            holePolygon.tag.type = Marc::GeometryType::Perimeter;
+            holePolygon.tag.buildStyle = Marc::BuildStyleID::CoreContour_Volume;
+            holePolygon.tag.layerNumber = layerIndex;
+            holePolygon.points.reserve(hole.size());
+            for (const auto& pt : hole) {
+                float x = static_cast<float>(pt.x * MESH_SCALING_FACTOR);
+                float y = static_cast<float>(pt.y * MESH_SCALING_FACTOR);
+                holePolygon.points.emplace_back(x, y);
+            }
+            marcExPoly.holes.push_back(std::move(holePolygon));
+        }
+
+        layer.exPolygons.push_back(std::move(marcExPoly));
+
+        // ---- Also store as polylines for backward compatibility / SVG ------
+        // Contour polyline (closed)
         {
             Marc::Polyline polyline;
             polyline.tag.type = Marc::GeometryType::Perimeter;
@@ -350,7 +388,7 @@ LayerSlices MeshProcessor::createLayerFromExPolygons(
             layer.polylines.push_back(std::move(polyline));
         }
 
-        // Convert holes to Marc::Polyline
+        // Hole polylines (closed)
         for (const auto& hole : exPoly.holes) {
             Marc::Polyline holeLine;
             holeLine.tag.type = Marc::GeometryType::Perimeter;

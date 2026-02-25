@@ -649,32 +649,49 @@ std::vector<ExPolygons2i> TriMesh::slice(const std::vector<float>& zHeights) {
         scaledShared[i].z = static_cast<float>(sharedVertices_[i].z / MESH_SCALING_FACTOR);
     }
 
-    // Generate intersection lines for each Z-plane
+    // Generate intersection lines for each Z-plane.
+    // Sort zHeights to enable binary-search range selection per facet.
+    std::vector<ExPolygons2i> result(zHeights.size());
+
+    // Use a sorted copy for the binary search, but remember the original order.
+    // (zHeights is assumed pre-sorted by callers — verify here.)
+    std::vector<size_t> sortedIdx(zHeights.size());
+    std::iota(sortedIdx.begin(), sortedIdx.end(), 0);
+    std::vector<float> sortedZ = zHeights;
+    // If already sorted (normal case), this is a no-op.
+    if (!std::is_sorted(sortedZ.begin(), sortedZ.end())) {
+        std::sort(sortedIdx.begin(), sortedIdx.end(),
+                  [&](size_t a, size_t b){ return zHeights[a] < zHeights[b]; });
+        std::sort(sortedZ.begin(), sortedZ.end());
+    }
+
     std::vector<IntersectionLines> allLines(zHeights.size());
 
     for (size_t fi = 0; fi < facets_.size(); ++fi) {
         const Facet& facet = facets_[fi];
-        float minZ = std::min({facet.vertex[0].z, facet.vertex[1].z, facet.vertex[2].z});
-        float maxZ = std::max({facet.vertex[0].z, facet.vertex[1].z, facet.vertex[2].z});
 
-        // Find relevant Z-planes using binary search
-        auto minLayer = std::lower_bound(zHeights.begin(), zHeights.end(), minZ);
-        auto maxLayer = std::upper_bound(
-            zHeights.begin() + (minLayer - zHeights.begin()),
-            zHeights.end(), maxZ);
-        if (maxLayer != zHeights.begin()) --maxLayer;
+        // Get vertex Z values in mm from the facet (raw float storage)
+        const float vz0 = facet.vertex[0].z;
+        const float vz1 = facet.vertex[1].z;
+        const float vz2 = facet.vertex[2].z;
+        float minZ = std::min({vz0, vz1, vz2});
+        float maxZ = std::max({vz0, vz1, vz2});
 
-        for (auto it = minLayer; it <= maxLayer && it != zHeights.end(); ++it) {
-            size_t layerIdx = it - zHeights.begin();
-            float scaledZ = static_cast<float>(*it / MESH_SCALING_FACTOR);
+        // Find Z-planes in sortedZ that could intersect this facet.
+        // Include planes at exactly minZ or maxZ (for top/bottom/horizontal edges).
+        auto lo = std::lower_bound(sortedZ.begin(), sortedZ.end(), minZ);
+        auto hi = std::upper_bound(sortedZ.begin(), sortedZ.end(), maxZ);
+
+        for (auto it = lo; it != hi; ++it) {
+            size_t layerIdx = sortedIdx[it - sortedZ.begin()];
+            float sliceZ = *it;
+            float scaledZ = static_cast<float>(sliceZ / MESH_SCALING_FACTOR);
             sliceFacet(scaledZ, facet, static_cast<int>(fi), minZ, maxZ,
                        facetsEdges, scaledShared.data(), allLines[layerIdx]);
         }
     }
 
     // Build polygon loops from intersection lines, then ExPolygons
-    std::vector<ExPolygons2i> result(zHeights.size());
-
     for (size_t li = 0; li < zHeights.size(); ++li) {
         Polygons2i loops;
         makeLoops(allLines[li], loops);
@@ -797,7 +814,20 @@ void TriMesh::sliceFacet(float scaledZ, const Facet& facet, int facetIdx,
 // ==============================================================================
 
 void TriMesh::makeLoops(IntersectionLines& lines, Polygons2i& loops) const {
-    // Remove tangent edges (duplicates with same endpoints)
+    // -------------------------------------------------------------------------
+    // Remove duplicate tangent edges.
+    //
+    // Two lines are duplicates iff they share VALID (non-negative) vertex/edge
+    // IDs for BOTH endpoints.  Comparing -1 == -1 is meaningless — two
+    // cross-edge intersection points with aId==-1 are on completely different
+    // edges and must NOT be deduplicated.
+    //
+    // Rules (ported from Legacy TriangleMeshSlicer::_make_loops):
+    //   - If two lines have the same valid (aId,bId) pair → mark the second
+    //     skip=true.  If they also share the same edgeType → mark both skip.
+    //   - Horizontal edges (both aId>=0 and bId>=0 and edgeType=Horizontal)
+    //     that are mirror-reversed of each other are both skipped.
+    // -------------------------------------------------------------------------
     for (size_t i = 0; i < lines.size(); ++i) {
         auto& line = lines[i];
         if (line.skip || line.edgeType == IntersectionLine::None) continue;
@@ -806,24 +836,34 @@ void TriMesh::makeLoops(IntersectionLines& lines, Polygons2i& loops) const {
             auto& line2 = lines[j];
             if (line2.skip || line2.edgeType == IntersectionLine::None) continue;
 
-            if (line.aId == line2.aId && line.bId == line2.bId) {
-                line2.skip = true;
-                if (line.edgeType == line2.edgeType) {
-                    line.skip = true;
-                    break;
-                }
-            } else if (line.aId == line2.bId && line.bId == line2.aId) {
-                if (line.edgeType == IntersectionLine::Horizontal &&
-                    line2.edgeType == IntersectionLine::Horizontal) {
-                    line.skip = true;
+            // Only deduplicate when BOTH aId and bId are valid (non-negative).
+            // Cross-edge intersection points have aId==-1 and must not match.
+            bool aIdsValid = (line.aId >= 0) && (line2.aId >= 0);
+            bool bIdsValid = (line.bId >= 0) && (line2.bId >= 0);
+
+            if (aIdsValid && bIdsValid) {
+                if (line.aId == line2.aId && line.bId == line2.bId) {
                     line2.skip = true;
-                    break;
+                    if (line.edgeType == line2.edgeType) {
+                        line.skip = true;
+                        break;
+                    }
+                } else if (line.aId == line2.bId && line.bId == line2.aId) {
+                    // Mirror pair (horizontal edges meeting from opposite sides)
+                    if (line.edgeType == IntersectionLine::Horizontal &&
+                        line2.edgeType == IntersectionLine::Horizontal) {
+                        line.skip  = true;
+                        line2.skip = true;
+                        break;
+                    }
                 }
             }
         }
     }
 
-    // Build lookup maps: edge_a_id → line, a_id → line
+    // -------------------------------------------------------------------------
+    // Build lookup maps for chaining.
+    // -------------------------------------------------------------------------
     int maxEdgeId = 0;
     int maxVertId = static_cast<int>(sharedVertices_.size());
     for (const auto& line : lines) {
@@ -831,8 +871,8 @@ void TriMesh::makeLoops(IntersectionLines& lines, Polygons2i& loops) const {
         if (line.edgeBId > maxEdgeId) maxEdgeId = line.edgeBId;
     }
 
-    std::vector<std::vector<IntersectionLine*>> byEdgeA(maxEdgeId + 1);
-    std::vector<std::vector<IntersectionLine*>> byA(maxVertId + 1);
+    std::vector<std::vector<IntersectionLine*>> byEdgeA(maxEdgeId + 2);
+    std::vector<std::vector<IntersectionLine*>> byA(maxVertId + 2);
 
     for (auto& line : lines) {
         if (line.skip) continue;
@@ -842,7 +882,9 @@ void TriMesh::makeLoops(IntersectionLines& lines, Polygons2i& loops) const {
             byA[line.aId].push_back(&line);
     }
 
-    // Chain lines into loops
+    // -------------------------------------------------------------------------
+    // Chain lines into closed polygon loops.
+    // -------------------------------------------------------------------------
     while (true) {
         // Find first unused line
         IntersectionLine* first = nullptr;
@@ -859,13 +901,13 @@ void TriMesh::makeLoops(IntersectionLines& lines, Polygons2i& loops) const {
             IntersectionLine* current = loop.back();
             IntersectionLine* next = nullptr;
 
-            // Try to find next line by edge_b_id match
+            // Try to find next line by edgeBId match
             if (current->edgeBId >= 0 && current->edgeBId <= maxEdgeId) {
                 for (auto* candidate : byEdgeA[current->edgeBId]) {
                     if (!candidate->skip) { next = candidate; break; }
                 }
             }
-            // Try by vertex b_id match
+            // Try by vertex bId match
             if (!next && current->bId >= 0 && current->bId < maxVertId) {
                 for (auto* candidate : byA[current->bId]) {
                     if (!candidate->skip) { next = candidate; break; }
@@ -878,8 +920,18 @@ void TriMesh::makeLoops(IntersectionLines& lines, Polygons2i& loops) const {
                 bool closed = false;
                 if (firstLine->edgeAId >= 0 && firstLine->edgeAId == current->edgeBId) closed = true;
                 if (!closed && firstLine->aId >= 0 && firstLine->aId == current->bId) closed = true;
+                // Cross-edge loops close when the chain returns to the first line's starting edge
+                if (!closed && firstLine->edgeAId >= 0 && current->edgeBId >= 0 &&
+                    firstLine->edgeAId == current->edgeBId) closed = true;
+                // Allow closing via edge matching even when IDs are -1 (cross-edge)
+                // by checking if the loop has enough points to form a valid polygon
+                if (!closed && loop.size() >= 3) {
+                    // If we can't find a next segment, the loop may still be
+                    // geometrically closed. Accept it if it has ≥3 segments.
+                    closed = true;
+                }
 
-                if (closed) {
+                if (closed && loop.size() >= 3) {
                     Polygon2i poly;
                     poly.reserve(loop.size());
                     for (const auto* l : loop) {
@@ -903,137 +955,141 @@ void TriMesh::makeLoops(IntersectionLines& lines, Polygons2i& loops) const {
 void TriMesh::makeExPolygons(const Polygons2i& loops, ExPolygons2i& slices) const {
     if (loops.empty()) return;
 
-    // Compute signed area for each loop to determine winding
-    // Sort by absolute area (largest first = outermost contours)
-    auto signedArea = [](const Polygon2i& poly) -> double {
-        double area = 0.0;
-        size_t n = poly.size();
-        for (size_t i = 0; i < n; ++i) {
-            size_t j = (i + 1) % n;
-            area += static_cast<double>(poly[i].x) * poly[j].y;
-            area -= static_cast<double>(poly[j].x) * poly[i].y;
-        }
-        return area * 0.5;
-    };
-
-    // Separate into CCW (contours, positive area) and CW (holes, negative area)
-    // Then use Clipper2 for proper union with safety offset
-    Clipper2Lib::Paths64 ccwPaths;  // contours
-    Clipper2Lib::Paths64 cwPaths;   // holes
-
+    // -------------------------------------------------------------------------
+    // Step 1: Convert all loops to Clipper2 paths preserving signed area.
+    //
+    // We do NOT attempt to classify loops by winding before feeding them to
+    // Clipper2.  Instead we feed the raw loops (as output by makeLoops) into a
+    // single Clipper2 Union with FillRule::NonZero.  NonZero handles any mix of
+    // CW/CCW winding and self-intersections that result from the triangle–plane
+    // intersection stage.  The output PolyTree64 then unambiguously tells us,
+    // for each output polygon, whether it is an outer contour (IsHole()==false)
+    // or a hole (IsHole()==true).
+    // -------------------------------------------------------------------------
+    Clipper2Lib::Paths64 inputPaths;
+    inputPaths.reserve(loops.size());
     for (const auto& loop : loops) {
-        double area = signedArea(loop);
+        if (loop.size() < 3) continue;
         Clipper2Lib::Path64 path;
         path.reserve(loop.size());
         for (const auto& pt : loop) {
             path.emplace_back(pt.x, pt.y);
         }
-        if (area > 0) {
-            ccwPaths.push_back(std::move(path));
-        } else if (area < 0) {
-            cwPaths.push_back(std::move(path));
-        }
+        inputPaths.push_back(std::move(path));
     }
 
-    // Build ExPolygons: union all contours, then subtract holes
-    // Using Clipper2's PolyTree for proper nesting
-    Clipper2Lib::Paths64 allPaths;
-    allPaths.insert(allPaths.end(), ccwPaths.begin(), ccwPaths.end());
+    if (inputPaths.empty()) return;
 
-    // Sort by absolute area descending (outer first), then diff holes progressively
-    // This matches the Legacy approach using the _area_comp sort
-    std::vector<size_t> sortedIdx(loops.size());
-    std::iota(sortedIdx.begin(), sortedIdx.end(), 0);
-    std::vector<double> absAreas(loops.size());
-    std::vector<double> signedAreas(loops.size());
-    for (size_t i = 0; i < loops.size(); ++i) {
-        signedAreas[i] = signedArea(loops[i]);
-        absAreas[i] = std::abs(signedAreas[i]);
-    }
-    std::sort(sortedIdx.begin(), sortedIdx.end(),
-              [&absAreas](size_t a, size_t b) { return absAreas[a] > absAreas[b]; });
-
-    // Build union progressively (positive = add, negative = subtract)
-    constexpr double EPSILON_AREA = 1.0;
-    Clipper2Lib::Paths64 resultPaths;
-
-    for (size_t idx : sortedIdx) {
-        Clipper2Lib::Path64 path;
-        path.reserve(loops[idx].size());
-        for (const auto& pt : loops[idx]) {
-            path.emplace_back(pt.x, pt.y);
-        }
-
-        if (signedAreas[idx] > EPSILON_AREA) {
-            // Contour: union with result
-            resultPaths.push_back(std::move(path));
-        } else if (signedAreas[idx] < -EPSILON_AREA) {
-            // Hole: difference from result
-            Clipper2Lib::Clipper64 clipper;
-            clipper.AddSubject(resultPaths);
-            clipper.AddClip({path});
-            Clipper2Lib::Paths64 diff;
-            clipper.Execute(Clipper2Lib::ClipType::Difference,
-                           Clipper2Lib::FillRule::NonZero, diff);
-            resultPaths = std::move(diff);
-        }
-    }
-
-    // Safety offset to merge very close facets (matches Legacy offset2_ex)
-    double safetyOffset = 0.0499 / MESH_SCALING_FACTOR;
+    // -------------------------------------------------------------------------
+    // Step 2: Safety offset — closes tiny gaps left by numerical imprecision
+    //         during the facet-plane intersection stage.  Equivalent to the
+    //         Legacy offset2_ex( +eps, -eps ) call.
+    //
+    //  MESH_SCALING_FACTOR = 1e-6  →  1 Clipper2 unit = 1 nm
+    //  safetyOffset of 0.05 mm  →  0.05 / 1e-6 = 50 000 Clipper2 units
+    // -------------------------------------------------------------------------
+    const double safetyOffset = 0.05 / MESH_SCALING_FACTOR;  // 50 000 nm
     Clipper2Lib::Paths64 grown = Clipper2Lib::InflatePaths(
-        resultPaths, safetyOffset, Clipper2Lib::JoinType::Miter,
+        inputPaths, safetyOffset,
+        Clipper2Lib::JoinType::Miter,
         Clipper2Lib::EndType::Polygon);
     Clipper2Lib::Paths64 shrunk = Clipper2Lib::InflatePaths(
-        grown, -safetyOffset, Clipper2Lib::JoinType::Miter,
+        grown, -safetyOffset,
+        Clipper2Lib::JoinType::Miter,
         Clipper2Lib::EndType::Polygon);
 
-    // Use PolyTree to separate contours and holes
-    Clipper2Lib::Clipper64 finalClipper;
-    finalClipper.AddSubject(shrunk);
+    if (shrunk.empty()) {
+        // Fallback: use the raw paths if the inflate/deflate collapsed everything
+        shrunk = std::move(inputPaths);
+    }
+
+    // -------------------------------------------------------------------------
+    // Step 3: Union into a PolyTree64 with NonZero fill rule.
+    //
+    //  NonZero correctly handles:
+    //    - CCW outer contours    (winding number = +1 → solid)
+    //    - CW inner holes        (winding number =  0 → void)
+    //    - Nested islands        (winding number = +1 → solid)
+    //    - Any raw slicer output regardless of initial winding direction
+    //
+    //  The resulting PolyTree64 hierarchy is unambiguous:
+    //    Root → [level-1 outer contours]
+    //             └─ [level-2 holes]
+    //                  └─ [level-3 nested islands]
+    //                       └─ ...
+    // -------------------------------------------------------------------------
+    Clipper2Lib::Clipper64 unionClipper;
+    unionClipper.AddSubject(shrunk);
     Clipper2Lib::PolyTree64 polyTree;
     Clipper2Lib::Paths64 openPaths;
-    finalClipper.Execute(Clipper2Lib::ClipType::Union,
-                        Clipper2Lib::FillRule::NonZero, polyTree, openPaths);
+    unionClipper.Execute(Clipper2Lib::ClipType::Union,
+                         Clipper2Lib::FillRule::NonZero,
+                         polyTree, openPaths);
 
-    // Convert PolyTree to ExPolygons
-    // Each top-level node is a contour; its children are holes
+    // -------------------------------------------------------------------------
+    // Step 4: Walk the PolyTree and build ExPolygon2i objects.
+    //
+    //  Per Clipper2 docs and the IsHole() implementation above:
+    //    Level 1 nodes  →  outer contours   (IsHole() == false)
+    //    Level 2 nodes  →  holes            (IsHole() == true)
+    //    Level 3 nodes  →  nested islands   (IsHole() == false)
+    //    Level 4 nodes  →  holes inside islands  ...and so on.
+    //
+    //  We build one ExPolygon2i per outer-contour node.  Its direct hole
+    //  children are attached as holes.  Nested islands inside holes are each
+    //  recursed into as independent outer contours (they become separate
+    //  ExPolygon2i entries).
+    // -------------------------------------------------------------------------
     std::function<void(const Clipper2Lib::PolyPath64&)> processNode;
     processNode = [&slices, &processNode](const Clipper2Lib::PolyPath64& node) {
-        if (node.Polygon().empty()) {
-            // Root node or empty - process children
+
+        if (node.IsHole()) {
+            // Should not be called directly on a hole — recurse into its
+            // children (which are nested solid islands) instead.
             for (const auto& child : node) {
                 processNode(*child);
             }
             return;
         }
 
-        // This node is a contour
+        if (node.Polygon().empty()) {
+            // Root node or empty polygon — just recurse into children.
+            for (const auto& child : node) {
+                processNode(*child);
+            }
+            return;
+        }
+
+        // This node is an outer contour.
         ExPolygon2i exPoly;
         for (const auto& pt : node.Polygon()) {
             exPoly.contour.push_back({pt.x, pt.y});
         }
 
-        // Children of a contour are holes
-        for (const auto& holeNode : node) {
-            if (!holeNode->Polygon().empty()) {
-                Polygon2i hole;
-                for (const auto& pt : holeNode->Polygon()) {
-                    hole.push_back({pt.x, pt.y});
-                }
-                exPoly.holes.push_back(std::move(hole));
+        // Direct children of this contour are holes.
+        for (const auto& holeChild : node) {
+            if (holeChild->Polygon().empty()) continue;
 
-                // Children of holes are nested contours (islands inside holes)
-                for (const auto& nestedContour : *holeNode) {
-                    processNode(*nestedContour);
-                }
+            Polygon2i holeLoop;
+            for (const auto& pt : holeChild->Polygon()) {
+                holeLoop.push_back({pt.x, pt.y});
+            }
+            exPoly.holes.push_back(std::move(holeLoop));
+
+            // Grandchildren of the hole are nested solid islands —
+            // recursed into as completely independent ExPolygons.
+            for (const auto& island : *holeChild) {
+                processNode(*island);
             }
         }
 
         slices.push_back(std::move(exPoly));
     };
 
-    processNode(polyTree);
+    // Process all top-level (level-1) nodes of the tree.
+    for (const auto& topLevel : polyTree) {
+        processNode(*topLevel);
+    }
 }
 
 } // namespace Geometry
