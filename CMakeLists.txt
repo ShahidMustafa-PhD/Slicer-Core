@@ -206,10 +206,14 @@ set(MARCSLM_IO_SOURCES
 set(MARCSLM_THERMAL_HEADERS
     include/MarcSLM/Thermal/ThermalSegmentTypes.hpp
     include/MarcSLM/Thermal/ScanSegmentClassifier.hpp
+    include/MarcSLM/Thermal/ThermalRegionHatcher.hpp
+    include/MarcSLM/Thermal/LayerPolygonExtractor.hpp
+    include/MarcSLM/Thermal/ClipperBoolean.hpp
 )
 
 set(MARCSLM_THERMAL_SOURCES
     src/Thermal/ScanSegmentClassifier.cpp
+    src/Thermal/ThermalRegionHatcher.cpp
 )
 
 set(MARCSLM_PATHPLANNING_HEADERS
