@@ -98,6 +98,11 @@ struct SlmConfig {
     double duplicate_distance = 6.0;         ///< Distance between duplicated objects [mm]
     bool   match_horizontal_surfaces = true; ///< Align top/bottom surfaces to layer heights
     bool   interface_shells = true;          ///< Generate interface shells
+	// ==============================================================================
+	//build plate
+	// =============================================================================
+    double bedWidth = 120.0;
+    double bedDepth = 120.0;
 };
 
 } // namespace MarcSLM
