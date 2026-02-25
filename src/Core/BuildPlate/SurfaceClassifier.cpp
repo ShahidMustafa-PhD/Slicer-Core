@@ -7,7 +7,7 @@
 #include <clipper2/clipper.h>
 
 namespace MarcSLM {
-namespace BuildPlate {
+namespace BP {
 
 // ==============================================================================
 // Public Interface
@@ -19,19 +19,14 @@ void SurfaceClassifier::classify(BuildLayer& layer) const
     const Clipper2Lib::Paths64 lowerPaths = collectContours(layer.lowerLayer);
 
     for (auto* regionPtr : layer.regions()) {
-        if (regionPtr) {
-            classifyRegion(*regionPtr, upperPaths, lowerPaths);
-        }
+        if (regionPtr) classifyRegion(*regionPtr, upperPaths, lowerPaths);
     }
 }
 
-void SurfaceClassifier::classifyAll(
-    const std::vector<BuildLayer*>& layers) const
+void SurfaceClassifier::classifyAll(const std::vector<BuildLayer*>& layers) const
 {
     for (auto* layer : layers) {
-        if (layer) {
-            classify(*layer);
-        }
+        if (layer) classify(*layer);
     }
 }
 
@@ -39,18 +34,14 @@ void SurfaceClassifier::classifyAll(
 // Private Helpers
 // ==============================================================================
 
-Clipper2Lib::Paths64 SurfaceClassifier::collectContours(
-    const BuildLayer* layer)
+Clipper2Lib::Paths64 SurfaceClassifier::collectContours(const BuildLayer* layer)
 {
     Clipper2Lib::Paths64 paths;
     if (!layer) return paths;
-
     for (const auto* region : layer->regions()) {
         if (!region) continue;
         for (const auto& surf : region->slices) {
-            if (surf.isValid()) {
-                paths.push_back(surf.contour);
-            }
+            if (surf.isValid()) paths.push_back(surf.contour);
         }
     }
     return paths;
@@ -64,15 +55,12 @@ void SurfaceClassifier::classifyRegion(
     for (auto& surf : region.slices) {
         if (!surf.isValid()) continue;
 
-        // Reset to Internal before re-classifying
-        surf.type = SurfaceType::Internal;
+        surf.type = SurfaceType::Internal;  // default
 
         const Clipper2Lib::Paths64 current = {surf.contour};
 
-        // --- Top test ----------------------------------------------------------
-        // A surface is (partially) top-facing when any part of it is NOT
-        // covered by the upper layer.
-        bool isTop = upperPaths.empty();   // no upper layer ? always exposed
+        // --- Top test ---
+        bool isTop = upperPaths.empty();
         if (!isTop) {
             const Clipper2Lib::Paths64 exposed =
                 Clipper2Lib::BooleanOp(Clipper2Lib::ClipType::Difference,
@@ -80,15 +68,10 @@ void SurfaceClassifier::classifyRegion(
                                        current, upperPaths);
             isTop = !exposed.empty();
         }
-        if (isTop) {
-            surf.type = SurfaceType::Top;
-            continue;   // Top takes priority over Bottom
-        }
+        if (isTop) { surf.type = SurfaceType::Top; continue; }
 
-        // --- Bottom test -------------------------------------------------------
-        // A surface is (partially) bottom-facing when it is not supported by
-        // the lower layer.
-        bool isBottom = lowerPaths.empty();  // no lower layer ? bottom of object
+        // --- Bottom test ---
+        bool isBottom = lowerPaths.empty();
         if (!isBottom) {
             const Clipper2Lib::Paths64 unsupported =
                 Clipper2Lib::BooleanOp(Clipper2Lib::ClipType::Difference,
@@ -96,12 +79,10 @@ void SurfaceClassifier::classifyRegion(
                                        current, lowerPaths);
             isBottom = !unsupported.empty();
         }
-        if (isBottom) {
-            surf.type = SurfaceType::Bottom;
-        }
-        // else: remains SurfaceType::Internal
+        if (isBottom) surf.type = SurfaceType::Bottom;
+        // else: remains Internal
     }
 }
 
-} // namespace BuildPlate
+} // namespace BP
 } // namespace MarcSLM

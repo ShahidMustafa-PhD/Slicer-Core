@@ -4,7 +4,7 @@
 
 #include "MarcSLM/Core/BuildPlate/SupportGenerator.hpp"
 
-#include "MarcSLM/Geometry/TriMesh.hpp"   // MESH_SCALING_FACTOR
+#include "MarcSLM/Geometry/TriMesh.hpp"
 
 #include <clipper2/clipper.h>
 
@@ -18,7 +18,7 @@
 #endif
 
 namespace MarcSLM {
-namespace BuildPlate {
+namespace BP {
 
 // ==============================================================================
 // Public Interface
@@ -57,13 +57,16 @@ SupportGenerator::placePillars(const OverhangMap& overhangs,
 
     const int64_t scaledSpacing = static_cast<int64_t>(
         pillarSpacing / Geometry::MESH_SCALING_FACTOR);
-
     if (scaledSpacing <= 0) return result;
 
-    for (const auto& [regionId, layerOverhangs] : overhangs) {
+    for (const auto& regionPair : overhangs) {
+        const std::size_t regionId      = regionPair.first;
+        const auto&       layerOverhangs = regionPair.second;
+
         // Collect and union all overhang paths for this region
         Clipper2Lib::Paths64 allOverhangs;
-        for (const auto& [, paths] : layerOverhangs) {
+        for (const auto& layerPair : layerOverhangs) {
+            const auto& paths = layerPair.second;
             allOverhangs.insert(allOverhangs.end(), paths.begin(), paths.end());
         }
         if (allOverhangs.empty()) continue;
@@ -100,11 +103,8 @@ SupportGenerator::placePillars(const OverhangMap& overhangs,
             }
         }
 
-        if (!regionPillars.empty()) {
-            result[regionId] = std::move(regionPillars);
-        }
+        if (!regionPillars.empty()) result[regionId] = std::move(regionPillars);
     }
-
     return result;
 }
 
@@ -120,9 +120,11 @@ SupportGenerator::resolveExtents(
     double                                              pillarSize)
 {
     std::map<std::size_t, std::vector<SupportPillar>> result;
-    (void)pillarSize;   // reserved for future extent-narrowing by bounding box
 
-    for (const auto& [regionId, points] : positions) {
+    for (const auto& regionPair : positions) {
+        const std::size_t regionId = regionPair.first;
+        const auto&       points   = regionPair.second;
+
         std::vector<SupportPillar> regionPillars;
 
         for (const auto& pt : points) {
@@ -139,8 +141,7 @@ SupportGenerator::resolveExtents(
             // Walk from top to bottom to find the contiguous gap
             for (int li = static_cast<int>(layers.size()) - 1; li >= 0; --li) {
                 const std::size_t layerIdx = static_cast<std::size_t>(li);
-                const auto* layer = layers[layerIdx];
-
+                const auto*       layer    = layers[layerIdx];
                 if (!layer || regionId >= layer->regionCount()) continue;
 
                 const auto* layerRegion = layer->getRegion(regionId);
@@ -194,9 +195,9 @@ SupportGenerator::resolveExtents(
 // ==============================================================================
 
 void SupportGenerator::stampGeometry(
-    const std::vector<BuildLayer*>&                            layers,
+    const std::vector<BuildLayer*>&                           layers,
     const std::map<std::size_t, std::vector<SupportPillar>>& pillarsByRegion,
-    double                                                     pillarSize)
+    double                                                    pillarSize)
 {
     const double baseRadius = pillarSize / 2.0;
     const double topRadius  = baseRadius * 0.2;
@@ -205,7 +206,10 @@ void SupportGenerator::stampGeometry(
         auto* layer = layers[li];
         if (!layer) continue;
 
-        for (const auto& [regionId, pillars] : pillarsByRegion) {
+        for (const auto& regionPair : pillarsByRegion) {
+            const std::size_t        regionId = regionPair.first;
+            const auto&              pillars  = regionPair.second;
+
             if (regionId >= layer->regionCount()) continue;
             auto* layerRegion = layer->getRegion(regionId);
             if (!layerRegion) continue;
@@ -213,9 +217,9 @@ void SupportGenerator::stampGeometry(
             for (const auto& pillar : pillars) {
                 if (li < pillar.bottomLayer || li > pillar.topLayer) continue;
 
-                const std::size_t span = (pillar.topLayer > pillar.bottomLayer)
-                    ? (pillar.topLayer - pillar.bottomLayer)
-                    : 1;
+                const std::size_t span =
+                    (pillar.topLayer > pillar.bottomLayer)
+                    ? (pillar.topLayer - pillar.bottomLayer) : 1;
                 const double heightFraction =
                     static_cast<double>(li - pillar.bottomLayer) /
                     static_cast<double>(span);
@@ -223,24 +227,22 @@ void SupportGenerator::stampGeometry(
                 const double radius = taperedRadius(heightFraction,
                                                     baseRadius, topRadius);
 
-                const int64_t scaledR  =
-                    static_cast<int64_t>(radius / Geometry::MESH_SCALING_FACTOR);
-                const int64_t cx =
-                    static_cast<int64_t>(pillar.x / Geometry::MESH_SCALING_FACTOR);
-                const int64_t cy =
-                    static_cast<int64_t>(pillar.y / Geometry::MESH_SCALING_FACTOR);
+                const int64_t scaledR = static_cast<int64_t>(
+                    radius / Geometry::MESH_SCALING_FACTOR);
+                const int64_t cx = static_cast<int64_t>(
+                    pillar.x / Geometry::MESH_SCALING_FACTOR);
+                const int64_t cy = static_cast<int64_t>(
+                    pillar.y / Geometry::MESH_SCALING_FACTOR);
 
-                const int sides =
-                    std::max(8, static_cast<int>(radius / 0.1) * 2 + 8);
+                const int sides = std::max(8,
+                    static_cast<int>(radius / 0.1) * 2 + 8);
 
                 ClassifiedSurface supportSurf;
                 supportSurf.contour = makeCircle(cx, cy, scaledR, sides);
                 supportSurf.type    = SurfaceType::Support;
 
-                if (supportSurf.isValid()) {
-                    layerRegion->supportSurfaces.push_back(
-                        std::move(supportSurf));
-                }
+                if (supportSurf.isValid())
+                    layerRegion->supportSurfaces.push_back(std::move(supportSurf));
             }
         }
     }
@@ -259,8 +261,10 @@ Clipper2Lib::Path64 SupportGenerator::makeCircle(int64_t cx, int64_t cy,
     for (int s = 0; s < sides; ++s) {
         const double angle = 2.0 * M_PI * s / sides;
         path.emplace_back(
-            cx + static_cast<int64_t>(static_cast<double>(radius) * std::cos(angle)),
-            cy + static_cast<int64_t>(static_cast<double>(radius) * std::sin(angle)));
+            cx + static_cast<int64_t>(
+                     static_cast<double>(radius) * std::cos(angle)),
+            cy + static_cast<int64_t>(
+                     static_cast<double>(radius) * std::sin(angle)));
     }
     return path;
 }
@@ -280,5 +284,5 @@ double SupportGenerator::taperedRadius(double heightFraction,
     return baseRadius - (baseRadius - topRadius) * t;
 }
 
-} // namespace BuildPlate
+} // namespace BP
 } // namespace MarcSLM
