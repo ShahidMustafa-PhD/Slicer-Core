@@ -1,20 +1,11 @@
 // ==============================================================================
 // MarcSLM - BuildPlate Shared Types
 // ==============================================================================
-// This header is the single shared-type contract for all BuildPlate sub-modules.
-// It re-exports the types from BuildPlate.hpp that are needed by the specialist
-// classes without pulling in the full BuildPlate orchestrator.
-//
-// Include order inside the BuildPlate subsystem:
-//   BuildTypes.hpp   ? LayerHeightGenerator / SurfaceClassifier /
-//                       OverhangDetector / SupportGenerator / LayerExporter
-//   BuildPlate.hpp   ? public API (includes BuildTypes.hpp transitively)
+// Shared data-layer types used by all BuildPlate sub-modules.
+// Lives in namespace MarcSLM::BP to avoid collision with class MarcSLM::BuildPlate.
 // ==============================================================================
 
 #pragma once
-
-// Forward-declare everything that lives in MarcSLM::  so each specialist
-// header only needs to include this one file.
 
 #include "MarcSLM/Core/MarcFormat.hpp"
 #include "MarcSLM/Geometry/TriMesh.hpp"   // MESH_SCALING_FACTOR, BBox3f
@@ -28,7 +19,7 @@
 namespace MarcSLM {
 
 // ==============================================================================
-// Forward Declarations (avoid pulling in full headers in sub-module headers)
+// Forward Declarations
 // ==============================================================================
 
 class BuildPlate;
@@ -80,8 +71,8 @@ enum class SurfaceType : std::uint8_t {
 
 /// @brief A surface polygon with its SLM classification type.
 struct ClassifiedSurface {
-    Clipper2Lib::Path64  contour;          ///< Outer boundary (CCW)
-    Clipper2Lib::Paths64 holes;            ///< Internal voids (CW each)
+    Clipper2Lib::Path64  contour;
+    Clipper2Lib::Paths64 holes;
     SurfaceType          type            = SurfaceType::Internal;
     std::uint16_t        extraPerimeters = 0;
     float                thickness       = 0.0f;
@@ -125,14 +116,9 @@ public:
     [[nodiscard]] BuildLayer*  layer()  const noexcept { return layer_;  }
     [[nodiscard]] PrintRegion* region() const noexcept { return region_; }
 
-    /// @brief Raw slice polygons (contour + holes from the mesh slicer).
-    SurfaceCollection slices;
-
-    /// @brief Classified fill surfaces (top / bottom / internal / bridge).
-    SurfaceCollection fillSurfaces;
-
-    /// @brief Support material surfaces (pillars stamped by SupportGenerator).
-    SurfaceCollection supportSurfaces;
+    SurfaceCollection slices;           ///< Raw slice polygons from the mesh slicer
+    SurfaceCollection fillSurfaces;     ///< Classified fill surfaces
+    SurfaceCollection supportSurfaces;  ///< Support pillars stamped by SupportGenerator
 
     /// @brief Copy slices ? fillSurfaces when fillSurfaces is empty.
     void prepareFillSurfaces();
@@ -153,29 +139,24 @@ public:
                double height, double printZ, double sliceZ);
     ~BuildLayer();
 
-    // Non-copyable, non-movable (owned by PrintObject via raw ptr vector)
     BuildLayer(const BuildLayer&)            = delete;
     BuildLayer& operator=(const BuildLayer&) = delete;
     BuildLayer(BuildLayer&&)                 = delete;
     BuildLayer& operator=(BuildLayer&&)      = delete;
 
-    // --- Identification ---
     [[nodiscard]] std::size_t  id()     const noexcept { return id_;     }
     [[nodiscard]] PrintObject* object() const noexcept { return object_; }
     [[nodiscard]] double       height() const noexcept { return height_; }
     [[nodiscard]] double       printZ() const noexcept { return printZ_; }
     [[nodiscard]] double       sliceZ() const noexcept { return sliceZ_; }
 
-    void setId(std::size_t id)   noexcept { id_     = id; }
-    void setPrintZ(double z)     noexcept { printZ_ = z;  }
+    void setId(std::size_t id) noexcept { id_     = id; }
+    void setPrintZ(double z)   noexcept { printZ_ = z;  }
 
-    // --- Layer Connectivity (non-owning neighbours) ---
     BuildLayer* upperLayer = nullptr;
     BuildLayer* lowerLayer = nullptr;
-
     bool slicingErrors = false;
 
-    // --- Region Access ---
     [[nodiscard]] std::size_t regionCount() const noexcept {
         return regions_.size();
     }
@@ -188,21 +169,25 @@ public:
         return regions_;
     }
 
-    // --- Merged Slices ---
-    /// @brief Union of all region contours for this layer.
     Clipper2Lib::Paths64 mergedSlices;
 
-    /// @brief Merge all region slices into mergedSlices via Clipper2 Union.
     void makeSlices();
 
 private:
     std::size_t  id_;
     PrintObject* object_;
-    double       height_;   ///< Layer thickness [mm]
-    double       printZ_;   ///< Absolute Z-position [mm]
-    double       sliceZ_;   ///< Slice Z midpoint [mm]
+    double       height_;
+    double       printZ_;
+    double       sliceZ_;
 
     std::vector<BuildLayerRegion*> regions_;
 };
 
 } // namespace MarcSLM
+
+// ==============================================================================
+// Sub-module namespace alias
+// ==============================================================================
+// All specialist service classes (LayerHeightGenerator, SurfaceClassifier, …)
+// live in namespace MarcSLM::BP to avoid collision with class MarcSLM::BuildPlate.
+namespace MarcSLM { namespace BP {} }
