@@ -17,7 +17,7 @@
 #include <vector>
 
 namespace MarcSLM {
-namespace BuildPlate {
+namespace BP {
 
 // ==============================================================================
 // LayerHeightGenerator
@@ -95,5 +95,5 @@ private:
                                 double               nominalH) noexcept;
 };
 
-} // namespace BuildPlate
+} // namespace BP
 } // namespace MarcSLM
