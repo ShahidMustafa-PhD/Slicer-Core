@@ -18,7 +18,7 @@
 #include <vector>
 
 namespace MarcSLM {
-namespace BuildPlate {
+namespace BP {
 
 // ==============================================================================
 // LayerExporter
@@ -26,19 +26,14 @@ namespace BuildPlate {
 
 /// @brief Converts processed BuildLayer data to Marc::Layer format.
 ///
-/// @details Ported and isolated from the legacy `BuildPlate::exportLayers`.
-///          Responsibilities:
-///            - Merge layers from all objects, sorted by printZ.
-///            - Convert ClassifiedSurface contours + holes to Marc::Polyline.
-///            - Map SurfaceType ? GeometryType + BuildStyleID.
-///            - Scale coordinates from Clipper2 integer units to mm.
-///            - Close every contour by appending the first point.
+/// @details Ported and isolated from legacy BuildPlate::exportLayers.
+///   - Merges layers from multiple objects sorted by printZ.
+///   - Maps ClassifiedSurface contours/holes to Marc::Polyline.
+///   - Maps SurfaceType ? GeometryType + BuildStyleID.
+///   - Scales coordinates from Clipper2 integer units to mm.
+///   - Closes every contour by appending its first point.
 ///
-/// ### Coordinate convention
-///   Clipper2 integer ? mm:  `x_mm = static_cast<double>(pt.x) * MESH_SCALING_FACTOR`
-///
-/// ### Thread Safety
-///   Stateless: `exportAll()` only reads input data and is fully re-entrant.
+/// Thread safety: stateless — exportAll() is fully re-entrant.
 class LayerExporter {
 public:
     // =========================================================================
@@ -59,17 +54,14 @@ public:
 
     /// @brief Convert all build layers (from all objects) into Marc::Layer.
     ///
-    /// @param objectLayers  Per-object collections of BuildLayer pointers.
+    /// @param objectLayers  Per-object collections of const BuildLayer*.
     ///                      The outer vector is indexed by object, the inner
-    ///                      by layer.  Null object-level vectors are skipped.
-    ///
+    ///                      by layer. Null pointers are skipped.
     /// @return  Vector of Marc::Layer sorted by ascending printZ.
     [[nodiscard]] std::vector<Marc::Layer> exportAll(
         const std::vector<std::vector<const BuildLayer*>>& objectLayers) const;
 
-    // =========================================================================
-    // Helpers (public to allow unit-testing of sub-operations)
-    // =========================================================================
+    // --- Unit-testable helpers -----------------------------------------------
 
     /// @brief Map a SurfaceType to a Marc::GeometryType.
     [[nodiscard]] static Marc::GeometryType surfaceToGeometryType(
@@ -115,5 +107,5 @@ private:
                               std::uint32_t           layerIdx);
 };
 
-} // namespace BuildPlate
+} // namespace BP
 } // namespace MarcSLM
