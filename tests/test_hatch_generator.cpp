@@ -547,3 +547,118 @@ TEST_F(HatchGeneratorTest, TallRectangleProducesCorrectHatches) {
     // vertical lines have count ~20 (2mm / 0.1mm) of ~20mm each
     EXPECT_GT(hatches0.size(), hatches90.size());
 }
+
+// ==============================================================================
+// Hole Exclusion Tests (ScanVectorClipper two-step algorithm)
+// ==============================================================================
+
+// Test: No scan vector midpoint should lie inside any hole
+TEST_F(HatchGeneratorTest, NoScanVectorInsideHole) {
+    HatchGenerator gen(config_);
+    auto contour = makeSquareContour(20.0);  // 20mm square
+
+    // Place a 4mm x 4mm hole centered at (10, 10)
+    Clipper2Lib::Paths64 holes;
+    holes.push_back(makeSquareHole(10.0, 10.0, 2.0));
+
+    auto hatches = gen.generateHatches(contour, holes, 0.0);
+    ASSERT_FALSE(hatches.empty());
+
+    // Verify: midpoint of every hatch segment must be OUTSIDE the hole
+    const auto& hole = holes[0];
+    for (const auto& line : hatches) {
+        double midX = (line.a.x + line.b.x) * 0.5;
+        double midY = (line.a.y + line.b.y) * 0.5;
+        Clipper2Lib::Point64 midPt(
+            mmToClipperUnits(midX), mmToClipperUnits(midY));
+        auto pip = Clipper2Lib::PointInPolygon(midPt, hole);
+        EXPECT_NE(pip, Clipper2Lib::PointInPolygonResult::IsInside)
+            << "Scan vector midpoint (" << midX << ", " << midY
+            << ") is INSIDE the hole polygon!";
+    }
+}
+
+// Test: Multiple holes should all be excluded
+TEST_F(HatchGeneratorTest, MultipleHolesExclusion) {
+    HatchGenerator gen(config_);
+    auto contour = makeSquareContour(30.0);  // 30mm square
+
+    Clipper2Lib::Paths64 holes;
+    holes.push_back(makeSquareHole(7.5, 7.5, 2.0));
+    holes.push_back(makeSquareHole(15.0, 15.0, 2.0));
+    holes.push_back(makeSquareHole(22.5, 22.5, 2.0));
+
+    auto hatches = gen.generateHatches(contour, holes, 0.0);
+    ASSERT_FALSE(hatches.empty());
+
+    // Verify: midpoint of every hatch segment must be outside ALL holes
+    for (const auto& line : hatches) {
+        double midX = (line.a.x + line.b.x) * 0.5;
+        double midY = (line.a.y + line.b.y) * 0.5;
+        Clipper2Lib::Point64 midPt(
+            mmToClipperUnits(midX), mmToClipperUnits(midY));
+
+        for (size_t h = 0; h < holes.size(); ++h) {
+            auto pip = Clipper2Lib::PointInPolygon(midPt, holes[h]);
+            EXPECT_NE(pip, Clipper2Lib::PointInPolygonResult::IsInside)
+                << "Scan vector midpoint (" << midX << ", " << midY
+                << ") is INSIDE hole #" << h;
+        }
+    }
+}
+
+// Test: A hole spanning the full width should produce zero hatches in that band
+TEST_F(HatchGeneratorTest, HoleFullyBlocksScanLine) {
+    HatchGenerator gen(config_);
+    auto contour = makeSquareContour(10.0);  // 10mm square
+
+    // Create a hole that spans the full width at y=5 (4mm tall strip)
+    Clipper2Lib::Path64 wideHole;
+    int64_t w = mmToClipperUnits(10.0);
+    int64_t y0 = mmToClipperUnits(3.0);
+    int64_t y1 = mmToClipperUnits(7.0);
+    // CW winding for hole
+    Clipper2Lib::Point64 h0; h0.x = 0;  h0.y = y0; wideHole.push_back(h0);
+    Clipper2Lib::Point64 h1; h1.x = 0;  h1.y = y1; wideHole.push_back(h1);
+    Clipper2Lib::Point64 h2; h2.x = w;  h2.y = y1; wideHole.push_back(h2);
+    Clipper2Lib::Point64 h3; h3.x = w;  h3.y = y0; wideHole.push_back(h3);
+
+    Clipper2Lib::Paths64 holes;
+    holes.push_back(wideHole);
+
+    auto hatches = gen.generateHatches(contour, holes, 0.0);
+    ASSERT_FALSE(hatches.empty());
+
+    // Verify: no hatch segment should have both endpoints in the y=[3,7] band
+    for (const auto& line : hatches) {
+        double midY = (line.a.y + line.b.y) * 0.5;
+        bool insideBand = (midY > 3.1 && midY < 6.9);
+        EXPECT_FALSE(insideBand)
+            << "Scan vector midY=" << midY << " is inside the blocked band [3,7]";
+    }
+}
+
+// Test: Island hatches also respect holes
+TEST_F(HatchGeneratorTest, IslandHatchesNoScanInsideHole) {
+    HatchGenerator gen(config_);
+    auto contour = makeSquareContour(20.0);
+
+    Clipper2Lib::Paths64 holes;
+    holes.push_back(makeSquareHole(10.0, 10.0, 3.0));
+
+    auto hatches = gen.generateIslandHatches(contour, holes);
+    ASSERT_FALSE(hatches.empty());
+
+    // Verify: midpoint of every hatch segment must be outside the hole
+    const auto& hole = holes[0];
+    for (const auto& line : hatches) {
+        double midX = (line.a.x + line.b.x) * 0.5;
+        double midY = (line.a.y + line.b.y) * 0.5;
+        Clipper2Lib::Point64 midPt(
+            mmToClipperUnits(midX), mmToClipperUnits(midY));
+        auto pip = Clipper2Lib::PointInPolygon(midPt, hole);
+        EXPECT_NE(pip, Clipper2Lib::PointInPolygonResult::IsInside)
+            << "Island hatch midpoint (" << midX << ", " << midY
+            << ") is INSIDE the hole polygon!";
+    }
+}

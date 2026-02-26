@@ -41,7 +41,7 @@ ThermalRegionHatcher::resolveParams(ThermalSegmentType segType,
     p.islandH = islandH_;
     p.overlap = endpointOverlap_;
 
-    // Compute per-layer angle: base + layerIndex * 67°
+    // Compute per-layer angle: base + layerIndex * 67ï¿½
     const double layerAngle = baseAngle_ + layerIndex * layerRotation_;
 
     switch (segType) {
@@ -219,7 +219,7 @@ ThermalRegionHatcher::hatchStripe(const Clipper2Lib::Paths64& region,
 }
 
 // ==============================================================================
-// Island Hatcher (PySLM IslandHatcher — checkerboard)
+// Island Hatcher (PySLM IslandHatcher ï¿½ checkerboard)
 // ==============================================================================
 
 std::vector<Marc::Line>
@@ -241,7 +241,7 @@ ThermalRegionHatcher::hatchIsland(const Clipper2Lib::Paths64& region,
             // Skip degenerate cells
             if ((cxMax - x) < p.spacing || (cyMax - y) < p.spacing) continue;
 
-            // Checkerboard angle: alternate 0° / 90° offset from base angle
+            // Checkerboard angle: alternate 0ï¿½ / 90ï¿½ offset from base angle
             double cellAngle = p.angle + (((cellRow + cellCol) % 2 == 0) ? 0.0 : 90.0);
 
             // Build the island cell rectangle in Clipper2 coords
@@ -326,10 +326,33 @@ ThermalRegionHatcher::clipLinesToRegion(const std::vector<Marc::Line>& lines,
     std::vector<Marc::Line> result;
     if (lines.empty() || region.empty()) return result;
 
+    // -------------------------------------------------------------------------
+    // Two-step clipping algorithm (matches ScanVectorClipper approach):
+    //   Step 1: Intersect open scan lines with outer boundary paths (CCW)
+    //   Step 2: Difference the result with hole paths (CW)
+    //
+    // The region paths come from LayerPolygonExtractor::extract() which
+    // produces CCW outers and CW holes after a Clipper2 Union.
+    // Clipper2Lib::IsPositive() returns true for CCW paths (outers).
+    // -------------------------------------------------------------------------
+
+    // Separate outer boundaries (CCW) from holes (CW)
+    Clipper2Lib::Paths64 outers;
+    Clipper2Lib::Paths64 holes;
+    for (const auto& path : region) {
+        if (path.size() < 3) continue;
+        if (Clipper2Lib::IsPositive(path)) {
+            outers.push_back(path);   // CCW = outer boundary
+        } else {
+            holes.push_back(path);    // CW  = hole
+        }
+    }
+
+    if (outers.empty()) return result;
+
     // Convert Marc::Lines to Clipper2 open subject paths
     Clipper2Lib::Paths64 openSubject;
     openSubject.reserve(lines.size());
-
     for (const auto& line : lines) {
         Clipper2Lib::Path64 path;
         path.push_back({toClip(line.a.x), toClip(line.a.y)});
@@ -337,30 +360,37 @@ ThermalRegionHatcher::clipLinesToRegion(const std::vector<Marc::Line>& lines,
         openSubject.push_back(std::move(path));
     }
 
-    // Clip against the region boundary.
-    //
-    // The region paths come from LayerPolygonExtractor::extract() which
-    // performs a Clipper2 Union with NonZero fill rule.  After that union:
-    //   - Outer boundary paths are CCW   (winding +1)
-    //   - Hole paths are CW              (winding -1 relative to outer)
-    //
-    // Using FillRule::NonZero here correctly treats the combined winding:
-    //   - Inside outer only:   +1 ? filled  ?
-    //   - Inside hole:          0 ? void    ?
-    // This ensures hatch lines are clipped away inside hole regions.
-    Clipper2Lib::Clipper64 clipper;
-    clipper.AddOpenSubject(openSubject);
-    clipper.AddClip(region);
+    // Step 1: Intersect with outer boundaries only
+    Clipper2Lib::Clipper64 clipper1;
+    clipper1.AddOpenSubject(openSubject);
+    clipper1.AddClip(outers);
 
-    Clipper2Lib::Paths64 closedSolution;
-    Clipper2Lib::Paths64 openSolution;
-    clipper.Execute(Clipper2Lib::ClipType::Intersection,
-                    Clipper2Lib::FillRule::NonZero,
-                    closedSolution, openSolution);
+    Clipper2Lib::Paths64 closedSol1;
+    Clipper2Lib::Paths64 contourClipped;
+    clipper1.Execute(Clipper2Lib::ClipType::Intersection,
+                     Clipper2Lib::FillRule::NonZero,
+                     closedSol1, contourClipped);
+
+    if (contourClipped.empty()) return result;
+
+    // Step 2: Subtract holes (if any)
+    Clipper2Lib::Paths64 finalPaths;
+    if (!holes.empty()) {
+        Clipper2Lib::Clipper64 clipper2;
+        clipper2.AddOpenSubject(contourClipped);
+        clipper2.AddClip(holes);
+
+        Clipper2Lib::Paths64 closedSol2;
+        clipper2.Execute(Clipper2Lib::ClipType::Difference,
+                         Clipper2Lib::FillRule::NonZero,
+                         closedSol2, finalPaths);
+    } else {
+        finalPaths = std::move(contourClipped);
+    }
 
     // Convert back to Marc::Line
-    result.reserve(openSolution.size());
-    for (const auto& path : openSolution) {
+    result.reserve(finalPaths.size());
+    for (const auto& path : finalPaths) {
         for (size_t i = 0; i + 1 < path.size(); ++i) {
             result.emplace_back(
                 static_cast<float>(toMm(path[i].x)),

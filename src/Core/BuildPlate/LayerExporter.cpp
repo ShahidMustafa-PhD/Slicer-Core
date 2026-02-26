@@ -1,5 +1,5 @@
 // ==============================================================================
-// MarcSLM - Layer Exporter — Implementation
+// MarcSLM - Layer Exporter ï¿½ Implementation
 // ==============================================================================
 
 #include "MarcSLM/Core/BuildPlate/LayerExporter.hpp"
@@ -144,6 +144,40 @@ void LayerExporter::appendRegion(Marc::Layer&            dest,
         for (const auto& hole : surf.holes) {
             if (hole.size() >= 3)
                 dest.polylines.push_back(convertPath(hole, tag, true));
+        }
+
+        // --- Also create ExPolygon (contour + holes) for hatch clipping ---
+        {
+            Marc::ExPolygon exPoly;
+            exPoly.tag = tag;
+
+            // Convert contour Path64 to Marc::Polygon (mm)
+            exPoly.contour.tag = tag;
+            exPoly.contour.points.reserve(surf.contour.size());
+            for (const auto& pt : surf.contour) {
+                exPoly.contour.points.emplace_back(
+                    static_cast<float>(static_cast<double>(pt.x) * Geometry::MESH_SCALING_FACTOR),
+                    static_cast<float>(static_cast<double>(pt.y) * Geometry::MESH_SCALING_FACTOR));
+            }
+
+            // Convert hole Path64s to Marc::Polygon (mm)
+            exPoly.holes.reserve(surf.holes.size());
+            for (const auto& hole : surf.holes) {
+                if (hole.size() < 3) continue;
+                Marc::Polygon holePoly;
+                holePoly.tag = tag;
+                holePoly.points.reserve(hole.size());
+                for (const auto& pt : hole) {
+                    holePoly.points.emplace_back(
+                        static_cast<float>(static_cast<double>(pt.x) * Geometry::MESH_SCALING_FACTOR),
+                        static_cast<float>(static_cast<double>(pt.y) * Geometry::MESH_SCALING_FACTOR));
+                }
+                exPoly.holes.push_back(std::move(holePoly));
+            }
+
+            if (exPoly.isValid()) {
+                dest.exPolygons.push_back(std::move(exPoly));
+            }
         }
     }
 

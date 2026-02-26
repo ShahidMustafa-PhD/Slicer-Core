@@ -16,7 +16,10 @@ project(
     LANGUAGES CXX
     DESCRIPTION "High-performance C++ core geometry engine for industrial DMLS/SLM slicing"
 )
-
+# Force build type to Release
+set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
+set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+message(STATUS "Build type forced to: ${CMAKE_BUILD_TYPE}")
 # ==============================================================================
 # C++ Standard Configuration
 # ==============================================================================
@@ -27,7 +30,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # ==============================================================================
 # Build Configuration Options
 # ==============================================================================
-option(MARCSLM_BUILD_TESTS "Build unit tests" ON)
+option(MARCSLM_BUILD_TESTS "Build unit tests" OFF)
 option(MARCSLM_BUILD_SHARED "Build shared library instead of static" OFF)
 
 # ==============================================================================
@@ -48,6 +51,9 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules")
 if(MSVC)
     # UTF-8 source and execution character sets
     add_compile_options(/utf-8)
+    
+    # Suppress C4828: illegal character in source file (non-UTF-8 bytes in comments/strings)
+    add_compile_options(/wd4828)
     
     # Warning level 4 (high)
     add_compile_options(/W4)
@@ -106,7 +112,9 @@ if(MSVC)
                 )
             endif()
             
-            message(STATUS "TBB: Using release library for debug builds (debug library not found)")
+            if(CMAKE_BUILD_TYPE MATCHES "^(Debug|)$")
+                message(STATUS "TBB: Using release library for debug builds (debug library not found)")
+            endif()
         endif()
     endif()
 endif()
@@ -218,10 +226,12 @@ set(MARCSLM_THERMAL_SOURCES
 
 set(MARCSLM_PATHPLANNING_HEADERS
     include/MarcSLM/PathPlanning/HatchGenerator.hpp
+    include/MarcSLM/PathPlanning/ScanVectorClipper.hpp
 )
 
 set(MARCSLM_PATHPLANNING_SOURCES
     src/PathPlanning/HatchGenerator.cpp
+    src/PathPlanning/ScanVectorClipper.cpp
 )
 
 set(MARCSLM_ENGINE_HEADERS

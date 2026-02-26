@@ -193,9 +193,28 @@ bool SlmPrint::generatePaths() {
     for (size_t i = 0; i < layers_.size(); ++i) {
         auto& layer = layers_[i];
 
-        // Rotate hatch angle by 67° per layer (industry standard SLM practice)
+        // Rotate hatch angle by 67ï¿½ per layer (industry standard SLM practice)
         double layerAngle = config_.hatch_angle + (i * 67.0);
         layerAngle = std::fmod(layerAngle, 360.0);
+
+        // ---- Diagnostic: contour and hole counts ----
+        std::cout << "  Layer " << layer.layerNumber
+                  << ": " << layer.exPolygons.size() << " ExPolygon(s)"
+                  << ", " << layer.polylines.size() << " polyline(s)"
+                  << std::endl;
+        if (!layer.exPolygons.empty()) {
+            for (size_t ep = 0; ep < layer.exPolygons.size(); ++ep) {
+                const auto& exPoly = layer.exPolygons[ep];
+                std::cout << "    ExPolygon[" << ep << "]: contour="
+                          << exPoly.contour.points.size() << " pts, "
+                          << exPoly.holes.size() << " hole(s)";
+                for (size_t h = 0; h < exPoly.holes.size(); ++h) {
+                    std::cout << " [hole" << h << "=" << exPoly.holes[h].points.size() << " pts]";
+                }
+                std::cout << std::endl;
+            }
+        }
+
 
         // ---- Preferred path: Use ExPolygons (contour + holes) ----
         // This is the correct SLM hatching approach: generate parallel lines
@@ -330,23 +349,23 @@ bool SlmPrint::exportSVG(const std::string& outputDir) {
 
             SVGExporter svg(outputPath.c_str(), bedW, bedD);
 
-            // Draw hatches — 0.04 mm stroke (visible at high zoom)
+            // Draw hatches ï¿½ 0.04 mm stroke (visible at high zoom)
             for (const auto& hatch : layer.hatches) {
                 svg.draw(hatch.lines, "green");
             }
 
-            // Draw contour polylines — blue
+            // Draw contour polylines ï¿½ blue
             for (const auto& polyline : layer.polylines) {
                 svg.draw(polyline, "blue");
             }
 
-            // Draw polygons (outlines) — red
+            // Draw polygons (outlines) ï¿½ red
             for (const auto& polygon : layer.polygons) {
                 svg.draw(polygon, "red");
             }
 
             // Draw ExPolygon contours (blue) and holes (red, dashed would
-            // require CSS support — use a distinct colour instead)
+            // require CSS support ï¿½ use a distinct colour instead)
             for (const auto& exPoly : layer.exPolygons) {
                 // Contour as closed polygon outline
                 if (exPoly.contour.isValid()) {
