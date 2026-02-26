@@ -45,12 +45,12 @@ ThermalRegionHatcher::resolveParams(ThermalSegmentType segType,
     const double layerAngle = baseAngle_ + layerIndex * layerRotation_;
 
     switch (segType) {
-        // ---- Core hatch: Island strategy (PySLM default) ------------------
+        // ---- Core hatch: Stripe strategy (clean SLM parallel scan vectors) --
         case ThermalSegmentType::CoreNormalHatch:
         case ThermalSegmentType::CoreOverhangHatch:
             p.spacing  = hatchSpacing_;
             p.angle    = std::fmod(layerAngle, 360.0);
-            p.strategy = HatchStrategy::Island;
+            p.strategy = HatchStrategy::Stripe;
             break;
 
         // ---- Shell1 hatch: Basic strategy, same spacing -------------------

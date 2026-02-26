@@ -173,7 +173,11 @@ ScanSegmentClassifier::classifyLayerImpl(
     classified.geometry       = layer;
 
     // ---- Stage 0: Passthrough pre-tagged geometry -------------------------
-    passExistingHatches(layer, classified);
+    // Only pass through pre-generated hatches if we are NOT generating
+    // new thermal hatch vectors (avoids double overlap in SVG).
+    if (!params_.generateHatchVectors) {
+        passExistingHatches(layer, classified);
+    }
     passExistingPolylines(layer, classified);
     passExistingPolygons(layer, classified);
 
